@@ -146,7 +146,79 @@ export function WithdrawalsTable({
     },
   ]
 
-  return <DataTable columns={columns} data={items} emptyText="No withdrawals found." />
+  return (
+    <DataTable
+      columns={columns}
+      data={items}
+      emptyText="No withdrawals found."
+      mobileCard={({ original }) => {
+        const status = statusMeta[original.status]
+        return (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-medium">{original.userName}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground capitalize">
+                  {original.type} · {formatDate(original.requestedAt)}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="font-semibold tabular-nums">
+                  {formatNaira(original.amount)}
+                </p>
+                <Badge variant="outline" className={cn("mt-1 font-medium", status.className)}>
+                  {status.label}
+                </Badge>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="truncate text-sm text-muted-foreground">
+                {original.destination}
+              </p>
+              {original.status === "pending" ? (
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Approve ${original.userName}'s withdrawal`}
+                    onClick={() =>
+                      onReview({
+                        id: original.id,
+                        name: original.userName,
+                        amount: original.amount,
+                        action: "approved",
+                      })
+                    }
+                  >
+                    <Check className="text-success" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Reject ${original.userName}'s withdrawal`}
+                    onClick={() =>
+                      onReview({
+                        id: original.id,
+                        name: original.userName,
+                        amount: original.amount,
+                        action: "rejected",
+                      })
+                    }
+                  >
+                    <X className="text-destructive" />
+                  </Button>
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {original.status}
+                </span>
+              )}
+            </div>
+          </div>
+        )
+      }}
+    />
+  )
 }
 
 export default function AdminWithdrawalsPage() {

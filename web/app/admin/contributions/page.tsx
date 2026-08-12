@@ -96,9 +96,45 @@ export default function AdminContributionsPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl bg-card shadow-sm">
-          <div className="overflow-x-auto">
-            <DataTable columns={columns} data={data ?? []} />
-          </div>
+          <DataTable
+            columns={columns}
+            data={data ?? []}
+            mobileCard={({ original }) => (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <Link
+                    href={`/admin/contributions/${original.id}`}
+                    className="min-w-0 font-medium hover:text-primary hover:underline underline-offset-4"
+                  >
+                    {original.name}
+                  </Link>
+                  <StatusBadge status={original.status} />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Amount</p>
+                    <p className="tabular-nums">
+                      {formatNaira(original.amount)} / {original.frequency}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Members</p>
+                    <p className="tabular-nums">{original.memberCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Progress</p>
+                    <p className="tabular-nums">{original.progress}%</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Starts</p>
+                    <p className="text-muted-foreground">
+                      {formatDate(original.startDate)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          />
         </div>
       )}
     </div>

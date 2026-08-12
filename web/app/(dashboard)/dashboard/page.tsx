@@ -12,6 +12,7 @@ import {
   Target,
 } from "lucide-react"
 
+import { BalanceSummary } from "@/components/dashboard/balance-summary"
 import { DashboardStatCard } from "@/components/dashboard/dashboard-stat-card"
 import {
   ContributionActivityChart,
@@ -27,12 +28,13 @@ import { Button } from "@/components/ui/button"
 import { PageSkeleton } from "@/components/shared/skeletons"
 import { SectionHeader } from "@/components/shared/section-header"
 import { FundingDialog } from "@/components/forms/funding-dialog"
+import { WithdrawDialog } from "@/components/forms/withdraw-dialog"
 import { useAuthStore } from "@/stores/auth-store"
 import { useContributions } from "@/hooks/queries/use-contributions"
 import { useSavings, useSavingsGrowth } from "@/hooks/queries/use-savings"
 import { useRecentTransactions } from "@/hooks/queries/use-transactions"
 import { dashboardOverview } from "@/lib/mock/dashboard"
-import { formatDate, formatNaira, relativeDate } from "@/lib/format"
+import { formatNaira } from "@/lib/format"
 
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user)
@@ -41,6 +43,7 @@ export default function DashboardPage() {
   const growth = useSavingsGrowth()
   const recentTxns = useRecentTransactions(5)
   const [fundingOpen, setFundingOpen] = React.useState(false)
+  const [withdrawOpen, setWithdrawOpen] = React.useState(false)
 
   const isLoading = contributions.isPending || savings.isPending || growth.isPending
 
@@ -60,47 +63,59 @@ export default function DashboardPage() {
   const next = data.upcomingContribution
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader
         title={`Good ${getGreeting()}, ${user?.firstName ?? ""}`}
         description="Here's what's happening with your money today."
       />
 
-      <section
-        aria-label="Financial overview"
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        <DashboardStatCard
-          title="Total Balance"
-          value={formatNaira(totalBalance)}
-          description="Wallet + active contributions"
-          icon={Wallet}
-        />
-        <DashboardStatCard
-          title="Total Savings"
-          value={formatNaira(savings.data?.balance ?? 0)}
-          description="Available in your wallet"
-          icon={PiggyBank}
-          tone="success"
-        />
-        <DashboardStatCard
-          title="Active Contributions"
-          value={formatNaira(totalContributions)}
-          description={`${activeContributionsList.length} active ${activeContributionsList.length === 1 ? "plan" : "plans"}`}
-          icon={Users}
-          tone="info"
-        />
-        <DashboardStatCard
-          title="Next Contribution"
-          value={formatNaira(next?.amount ?? 0)}
-          description={
-            next ? `Due ${relativeDate(next.nextPaymentDate)}` : "No due payments"
-          }
-          icon={CalendarClock}
-          tone="warning"
+      {/* 1. Financial summary */}
+      <section aria-label="Financial summary">
+        <BalanceSummary
+          balance={totalBalance}
+          wallet={savings.data?.balance ?? 0}
+          savings={data.totalSavings}
+          activePlanCount={activeContributionsList.length}
+          activePlanAmount={totalContributions}
+          onDeposit={() => setFundingOpen(true)}
+          onWithdraw={() => setWithdrawOpen(true)}
         />
       </section>
 
+      {/* 2. Financial health */}
+      <section aria-label="Financial health">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <DashboardStatCard
+            title="Protected funds"
+            value={formatNaira(data.totalSavings)}
+            description="Locked savings"
+            icon={PiggyBank}
+            tone="success"
+          />
+          <DashboardStatCard
+            title="Monthly inflow"
+            value={formatNaira(data.nextContribution.amount * 2)}
+            description="Added this month"
+            icon={Wallet}
+          />
+          <DashboardStatCard
+            title="Next contribution"
+            value={formatNaira(next?.amount ?? 0)}
+            description={next ? `Due ${next.nextPaymentDate.split("T")[0]}` : "No due payments"}
+            icon={CalendarClock}
+            tone="warning"
+          />
+          <DashboardStatCard
+            title="Active contributions"
+            value={formatNaira(totalContributions)}
+            description={`${activeContributionsList.length} active ${activeContributionsList.length === 1 ? "plan" : "plans"}`}
+            icon={Users}
+            tone="info"
+          />
+        </div>
+      </section>
+
+      {/* 3. Quick actions */}
       <section aria-label="Quick actions">
         <QuickActions
           actions={[
@@ -112,19 +127,15 @@ export default function DashboardPage() {
         />
       </section>
 
-      <section aria-label="Charts" className="grid gap-4 xl:grid-cols-2">
-        <SavingsGrowthChart data={growth.data ?? data.savingsGrowth} />
-        <ContributionActivityChart data={data.contributionActivity} />
-      </section>
-
+      {/* 4. Plan progress */}
       {activeContributionsList.length > 0 && (
         <section aria-label="Active plans">
           <SectionHeader
-            title="Active plans"
+            title="Plan progress"
             description="Your contributions at a glance."
             action={
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 render={<Link href="/contributions" />}
               >
@@ -140,8 +151,29 @@ export default function DashboardPage() {
         </section>
       )}
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        {next && (
+      {/* 5. Recent activity */}
+      <section aria-label="Recent activity">
+        <SectionHeader
+          title="Recent activity"
+          description="Your latest transactions."
+          action={
+            <Button
+              variant="ghost"
+              size="sm"
+              render={<Link href="/transactions" />}
+            >
+              View all
+            </Button>
+          }
+        />
+        <div className="mt-4">
+          <TransactionsList transactions={recentTxns.data ?? []} />
+        </div>
+      </section>
+
+      {/* 6. Charts / analytics */}
+      {next && (
+        <section aria-label="Upcoming contribution" className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Upcoming contribution</CardTitle>
@@ -149,17 +181,17 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="flex items-end justify-between gap-3">
-                <p className="text-3xl font-semibold tabular-nums">
+                <p className="text-2xl font-semibold tabular-nums sm:text-3xl">
                   {formatNaira(next.amount)}
                 </p>
                 <Badge className="border-transparent bg-primary/10 text-primary dark:bg-primary/20">
-                  {relativeDate(next.nextPaymentDate)}
+                  {next.nextPaymentDate.split("T")[0]}
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">
                 Next payment due{" "}
                 <span className="font-medium text-foreground">
-                  {formatDate(next.nextPaymentDate)}
+                  {next.nextPaymentDate.split("T")[0]}
                 </span>
               </p>
               <Button
@@ -171,27 +203,29 @@ export default function DashboardPage() {
               </Button>
             </CardContent>
           </Card>
-        )}
 
-        <div className="flex flex-col gap-4">
-          <SectionHeader
-            title="Recent transactions"
-            description="Your latest activity."
-            action={
-              <Button
-                variant="ghost"
-                size="sm"
-                render={<Link href="/transactions" />}
-              >
-                View all
-              </Button>
-            }
-          />
-          <TransactionsList transactions={recentTxns.data ?? []} />
-        </div>
+          <div className="flex flex-col">
+            <SectionHeader
+              title="Savings growth"
+              description="Your savings balance over time."
+            />
+            <div className="mt-4 flex-1">
+              <SavingsGrowthChart data={growth.data ?? data.savingsGrowth} />
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section aria-label="Analytics" className="grid gap-4 xl:grid-cols-2">
+        <ContributionActivityChart data={data.contributionActivity} />
       </section>
 
       <FundingDialog open={fundingOpen} onOpenChange={setFundingOpen} />
+      <WithdrawDialog
+        open={withdrawOpen}
+        onOpenChange={setWithdrawOpen}
+        balance={savings.data?.balance ?? 0}
+      />
     </div>
   )
 }

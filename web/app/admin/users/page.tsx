@@ -229,10 +229,100 @@ export default function AdminUsersPage() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl bg-card shadow-sm">
-          <div className="overflow-x-auto">
-            <DataTable columns={columns} data={data ?? []} />
+            <DataTable
+              columns={columns}
+              data={data ?? []}
+              mobileCard={({ original }) => (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Avatar size="sm">
+                        <AvatarFallback>
+                          {getInitials(original.firstName, original.lastName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">
+                          {original.firstName} {original.lastName}
+                        </p>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {original.email}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "shrink-0 font-medium capitalize",
+                        original.status === "active" &&
+                          "border-transparent bg-success/15 text-success",
+                        original.status === "suspended" &&
+                          "border-transparent bg-warning/15 text-warning",
+                        original.status === "invited" &&
+                          "border-transparent bg-info/15 text-info dark:bg-info/25"
+                      )}
+                    >
+                      {original.status}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground capitalize">
+                        {original.role}
+                      </span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="tabular-nums">{formatNaira(85000)}</span>
+                    </div>
+                    {original.id !== currentUserId && (
+                      <div className="flex items-center gap-1">
+                        {original.status !== "invited" && (
+                          original.status === "active" ? (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Suspend ${original.firstName}`}
+                              onClick={() =>
+                                setPendingUser({
+                                  id: original.id,
+                                  name: `${original.firstName} ${original.lastName}`,
+                                  action: "suspended",
+                                })
+                              }
+                            >
+                              <UserX className="text-destructive" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Reactivate ${original.firstName}`}
+                              onClick={() =>
+                                setPendingUser({
+                                  id: original.id,
+                                  name: `${original.firstName} ${original.lastName}`,
+                                  action: "active",
+                                })
+                              }
+                            >
+                              <UserCheck className="text-success" />
+                            </Button>
+                          )
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Delete ${original.firstName}`}
+                          onClick={() => setPendingDelete(original)}
+                        >
+                          <Trash2 className="text-destructive" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            />
           </div>
-        </div>
       )}
 
       <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />

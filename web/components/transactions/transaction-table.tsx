@@ -106,5 +106,59 @@ export function TransactionTable({
       : []),
   ]
 
-  return <DataTable columns={columns} data={transactions} />
+  return (
+    <DataTable
+      columns={columns}
+      data={transactions}
+      mobileCard={({ original }) => {
+        const type = transactionTypeMeta[original.type]
+        const status = transactionStatusMeta[original.status]
+        const isIncoming = original.type !== "withdrawal"
+        return (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{original.description}</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {formatDate(original.date)} · {original.reference}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "shrink-0 text-sm font-semibold tabular-nums",
+                  isIncoming ? "text-success" : "text-destructive"
+                )}
+              >
+                {isIncoming ? "+" : "-"}
+                {formatNaira(original.amount)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <Badge variant="outline" className="font-normal capitalize">
+                {type.label}
+              </Badge>
+              <div className="flex items-center gap-2">
+                {original.status === "failed" && onRevert && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onRevert(original)}
+                  >
+                    <Undo2 />
+                    Revert
+                  </Button>
+                )}
+                <Badge
+                  variant="outline"
+                  className={cn("font-medium", status.className)}
+                >
+                  {status.label}
+                </Badge>
+              </div>
+            </div>
+          </div>
+        )
+      }}
+    />
+  )
 }
