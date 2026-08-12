@@ -114,10 +114,9 @@ export default function ProfilePage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="overflow-hidden lg:col-span-3">
-          <div className="h-32 bg-gradient-to-r from-primary/80 via-primary to-primary/40 sm:h-40" aria-hidden="true" />
           <CardContent className="relative">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-              <div className="-mt-20 flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -130,8 +129,8 @@ export default function ProfilePage() {
                       {getInitials(user.firstName, user.lastName)}
                     </AvatarFallback>
                   </Avatar>
-                  <AvatarBadge className="size-8 translate-x-1 translate-y-1">
-                    <Camera className="size-3.5" aria-hidden="true" />
+                  <AvatarBadge className="size-6 translate-x-2 translate-y-2">
+                    <Camera className="size-3" aria-hidden="true" />
                   </AvatarBadge>
                 </button>
 
