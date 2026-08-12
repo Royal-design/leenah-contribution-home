@@ -46,23 +46,19 @@ const formSchema = z
     name: z.string().trim().min(3, "Plan name must be at least 3 characters."),
     description: z.string().trim().min(10, "Add a short description."),
     amount: z.coerce
-      .number({ invalid_type_error: "Enter a valid amount." })
+      .number("Enter a valid amount.")
       .int()
       .positive("Amount must be greater than zero."),
-    frequency: z.enum(["weekly", "biweekly", "monthly", "custom"], {
-      errorMap: () => ({ message: "Select a frequency." }),
-    }),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "custom"], "Select a frequency."),
     startDate: z.string().min(1, "Choose a start date."),
     endDate: z.string().min(1, "Choose an end date."),
     memberCount: z.coerce
-      .number({ invalid_type_error: "Enter a valid number." })
+      .number("Enter a valid number.")
       .int()
       .min(2, "At least 2 members.")
       .max(100, "Maximum 100 members."),
     withdrawalDate: z.string().min(1, "Choose a withdrawal date."),
-    status: z.enum(["draft", "active", "paused", "completed"], {
-      errorMap: () => ({ message: "Select a status." }),
-    }),
+    status: z.enum(["draft", "active", "paused", "completed"], "Select a status."),
     withdrawalRule: z.string().trim().min(5, "Describe the withdrawal rule."),
   })
   .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {

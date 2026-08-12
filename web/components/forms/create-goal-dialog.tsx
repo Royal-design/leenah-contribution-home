@@ -27,7 +27,7 @@ import { useCreateSavingsGoal } from "@/hooks/queries/use-savings"
 const formSchema = z.object({
   name: z.string().trim().min(3, "Goal name must be at least 3 characters."),
   target: z.coerce
-    .number({ invalid_type_error: "Enter a valid target." })
+    .number("Enter a valid target.")
     .int("Target must be a whole number.")
     .positive("Target must be greater than zero."),
   targetDate: z.string().optional(),

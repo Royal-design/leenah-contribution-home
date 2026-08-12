@@ -34,13 +34,11 @@ const methods = [
 
 const formSchema = z.object({
   amount: z.coerce
-    .number({ invalid_type_error: "Enter a valid amount." })
+    .number("Enter a valid amount.")
     .int("Amount must be a whole number.")
     .positive("Amount must be greater than zero.")
     .max(5000000, "Maximum funding amount is ₦5,000,000."),
-  method: z.enum(["Card", "Bank Transfer", "Wallet"], {
-    errorMap: () => ({ message: "Select a funding method." }),
-  }),
+  method: z.enum(["Card", "Bank Transfer", "Wallet"], "Select a funding method."),
 })
 
 type FormValues = z.infer<typeof formSchema>

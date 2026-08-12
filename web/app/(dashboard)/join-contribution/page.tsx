@@ -34,20 +34,18 @@ const formSchema = z
   .object({
     planId: z.string().min(1, "Select a contribution plan."),
     amount: z.coerce
-      .number({ invalid_type_error: "Enter a valid amount." })
+      .number("Enter a valid amount.")
       .int("Amount must be a whole number.")
       .positive("Amount must be greater than zero."),
-    frequency: z.enum(["weekly", "biweekly", "monthly", "custom"], {
-      errorMap: () => ({ message: "Select a frequency." }),
-    }),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "custom"], "Select a frequency."),
     startDate: z.string().min(1, "Choose a start date."),
     memberCount: z.coerce
-      .number({ invalid_type_error: "Enter a valid number." })
+      .number("Enter a valid number.")
       .int("Member count must be a whole number.")
       .min(2, "At least 2 members are required.")
       .max(50, "Maximum 50 members."),
     rounds: z.coerce
-      .number({ invalid_type_error: "Enter a valid number." })
+      .number("Enter a valid number.")
       .int()
       .min(1, "At least 1 round is required."),
     withdrawalDate: z.string().min(1, "Choose a withdrawal date."),

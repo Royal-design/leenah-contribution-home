@@ -27,7 +27,7 @@ const settingsSchema = z.object({
   platformName: z.string().trim().min(2, "Platform name is required."),
   contactEmail: z.string().email("Enter a valid email address."),
   withdrawalFee: z.coerce
-    .number({ invalid_type_error: "Enter a valid fee." })
+    .number("Enter a valid fee.")
     .int()
     .min(0, "Fee cannot be negative."),
   bankName: z.string().trim().min(2, "Enter the settlement bank."),

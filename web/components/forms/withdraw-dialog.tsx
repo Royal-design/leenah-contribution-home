@@ -26,7 +26,7 @@ import { useWithdrawSavings } from "@/hooks/queries/use-savings"
 
 const formSchema = z.object({
   amount: z.coerce
-    .number({ invalid_type_error: "Enter a valid amount." })
+    .number("Enter a valid amount.")
     .int("Amount must be a whole number.")
     .positive("Amount must be greater than zero."),
   bankName: z.string().trim().min(2, "Enter your bank name."),
