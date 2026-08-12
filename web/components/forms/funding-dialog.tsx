@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Controller, useForm } from "react-hook-form"
+import { Controller, useForm, type Resolver } from "react-hook-form"
 import * as z from "zod"
 
 import { Button } from "@/components/ui/button"
@@ -55,7 +55,7 @@ export function FundingDialog({
   const fundSavings = useFundSavings()
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as Resolver<FormValues>,
     defaultValues: { amount: 10000, method: "Card" },
   })
 

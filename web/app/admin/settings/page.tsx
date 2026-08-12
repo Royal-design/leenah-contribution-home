@@ -4,7 +4,7 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Controller, useForm } from "react-hook-form"
+import { Controller, useForm, type Resolver } from "react-hook-form"
 import * as z from "zod"
 import { Trash2 } from "lucide-react"
 
@@ -45,7 +45,7 @@ export default function AdminSettingsPage() {
   const [deleting, setDeleting] = React.useState(false)
 
   const form = useForm<SettingsValues>({
-    resolver: zodResolver(settingsSchema),
+    resolver: zodResolver(settingsSchema) as Resolver<SettingsValues>,
     defaultValues: {
       platformName: "LCH Contribution & Savings",
       contactEmail: "support@lch.ng",

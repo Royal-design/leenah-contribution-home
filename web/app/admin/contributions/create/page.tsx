@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Controller, useForm } from "react-hook-form"
+import { Controller, useForm, type Resolver } from "react-hook-form"
 import * as z from "zod"
 import { toast } from "sonner"
 import { ChevronLeft, Save } from "lucide-react"
@@ -76,7 +76,7 @@ export default function CreateContributionPage() {
   const router = useRouter()
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as Resolver<FormValues>,
     defaultValues: {
       name: "Monthly Growth Circle",
       description:
