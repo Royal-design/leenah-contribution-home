@@ -2,24 +2,19 @@
 
 import * as React from "react"
 import { Eye, UserX, UserCheck } from "lucide-react"
+import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { DataTable } from "@/components/ui/data-table"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { useAdminUsers, useSetUserStatus } from "@/hooks/queries/use-admin"
 import { formatDate, getInitials, formatNaira } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import type { User } from "@/types"
 
 export default function AdminUsersPage() {
   const { data, isPending } = useAdminUsers()
@@ -29,6 +24,115 @@ export default function AdminUsersPage() {
     name: string
     action: "suspended" | "active"
   } | null>(null)
+
+  const columns: ColumnDef<User>[] = [
+    {
+      accessorKey: "firstName",
+      header: "User",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-3">
+          <Avatar size="sm">
+            <AvatarFallback>
+              {getInitials(row.original.firstName, row.original.lastName)}
+            </AvatarFallback>
+          </Avatar>
+          <span className="font-medium">
+            {row.original.firstName} {row.original.lastName}
+          </span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "email",
+      header: "Email",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.email}</span>
+      ),
+    },
+    {
+      accessorKey: "joinedAt",
+      header: "Joined",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {formatDate(row.original.joinedAt)}
+        </span>
+      ),
+    },
+    {
+      id: "activeContributions",
+      header: "Active contributions",
+      cell: () => <span className="tabular-nums">2</span>,
+    },
+    {
+      id: "savings",
+      header: "Savings",
+      cell: () => <span className="tabular-nums">{formatNaira(85000)}</span>,
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <Badge
+          variant="outline"
+          className={cn(
+            "font-medium",
+            row.original.status === "active"
+              ? "border-transparent bg-success/15 text-success"
+              : "border-transparent bg-warning/15 text-warning"
+          )}
+        >
+          {row.original.status === "active" ? "Active" : "Suspended"}
+        </Badge>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      meta: { align: "right" },
+      cell: ({ row }) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`View ${row.original.firstName}`}
+          >
+            <Eye />
+          </Button>
+          {row.original.status === "active" ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Suspend ${row.original.firstName}`}
+              onClick={() =>
+                setPendingUser({
+                  id: row.original.id,
+                  name: `${row.original.firstName} ${row.original.lastName}`,
+                  action: "suspended",
+                })
+              }
+            >
+              <UserX className="text-destructive" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Reactivate ${row.original.firstName}`}
+              onClick={() =>
+                setPendingUser({
+                  id: row.original.id,
+                  name: `${row.original.firstName} ${row.original.lastName}`,
+                  action: "active",
+                })
+              }
+            >
+              <UserCheck className="text-success" />
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ]
 
   return (
     <div className="flex flex-col gap-8">
@@ -44,99 +148,10 @@ export default function AdminUsersPage() {
           <Skeleton className="h-10 w-full rounded-xl" />
         </div>
       ) : (
-        <div className="rounded-xl border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Joined</TableHead>
-                <TableHead>Active contributions</TableHead>
-                <TableHead>Savings</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(data ?? []).map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar size="sm">
-                        <AvatarFallback>
-                          {getInitials(user.firstName, user.lastName)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="font-medium">
-                        {user.firstName} {user.lastName}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {user.email}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(user.joinedAt)}
-                  </TableCell>
-                  <TableCell className="tabular-nums">2</TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatNaira(85000)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "font-medium",
-                        user.status === "active"
-                          ? "border-transparent bg-success/15 text-success"
-                          : "border-transparent bg-warning/15 text-warning"
-                      )}
-                    >
-                      {user.status === "active" ? "Active" : "Suspended"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon-sm" aria-label={`View ${user.firstName}`}>
-                        <Eye />
-                      </Button>
-                      {user.status === "active" ? (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Suspend ${user.firstName}`}
-                          onClick={() =>
-                            setPendingUser({
-                              id: user.id,
-                              name: `${user.firstName} ${user.lastName}`,
-                              action: "suspended",
-                            })
-                          }
-                        >
-                          <UserX className="text-destructive" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Reactivate ${user.firstName}`}
-                          onClick={() =>
-                            setPendingUser({
-                              id: user.id,
-                              name: `${user.firstName} ${user.lastName}`,
-                              action: "active",
-                            })
-                          }
-                        >
-                          <UserCheck className="text-success" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <div className="overflow-hidden rounded-xl bg-card shadow-sm">
+          <div className="overflow-x-auto">
+            <DataTable columns={columns} data={data ?? []} />
+          </div>
         </div>
       )}
 

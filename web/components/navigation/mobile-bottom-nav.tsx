@@ -20,8 +20,10 @@ export function MobileBottomNav({
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 pb-[max(env(safe-area-inset-bottom),0.75rem)]"
     >
-      <div className="mx-auto flex max-w-md items-center justify-between gap-1 rounded-2xl border bg-popover/95 px-2 py-1.5 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-popover/85 z-[1] m-0!" style={{ width: "calc(100% - 2rem)" }}>
-        <div className="flex flex-1 items-center justify-around">
+      <div className="relative mx-auto max-w-md rounded-2xl border bg-popover/95 px-3 py-2 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-popover/85"
+          style={{ width: "calc(100% - 2rem)" }}
+        >
+        <div className="grid grid-cols-5 items-end">
           {mobilePrimaryNav.slice(0, 2).map((item) => {
             const Icon = item.icon
             const active =
@@ -32,7 +34,7 @@ export function MobileBottomNav({
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex flex-1 flex-col items-center gap-1 rounded-lg py-1.5 text-[0.7rem] font-medium transition-colors",
+                  "flex flex-col items-center gap-1 rounded-lg py-1.5 text-[0.7rem] font-medium transition-colors",
                   active ? "text-primary" : "text-muted-foreground"
                 )}
               >
@@ -46,12 +48,12 @@ export function MobileBottomNav({
             type="button"
             onClick={onCenterAction}
             aria-label="Add money"
-            className="mx-1 flex -translate-y-1 flex-col items-center"
+            className="relative flex -translate-y-3 flex-col items-center"
           >
-            <span className="flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md ring-4 ring-background transition-transform active:scale-95">
+            <span className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md ring-4 ring-background transition-transform active:scale-95">
               <Plus className="size-5" aria-hidden="true" />
             </span>
-            <span className="mt-0.5 text-[0.7rem] font-medium text-primary">
+            <span className="absolute top-full mt-0.5 text-[0.7rem] font-medium text-primary whitespace-nowrap">
               Add Money
             </span>
           </button>
@@ -66,7 +68,7 @@ export function MobileBottomNav({
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex flex-1 flex-col items-center gap-1 rounded-lg py-1.5 text-[0.7rem] font-medium transition-colors",
+                  "flex flex-col items-center gap-1 rounded-lg py-1.5 text-[0.7rem] font-medium transition-colors",
                   active ? "text-primary" : "text-muted-foreground"
                 )}
               >

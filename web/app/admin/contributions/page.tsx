@@ -2,18 +2,12 @@
 
 import Link from "next/link"
 import { Plus } from "lucide-react"
+import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { DataTable } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { useContributions } from "@/hooks/queries/use-contributions"
 import { formatDate, formatNaira } from "@/lib/format"
@@ -21,6 +15,66 @@ import type { Contribution } from "@/types"
 
 export default function AdminContributionsPage() {
   const { data, isPending } = useContributions()
+
+  const columns: ColumnDef<Contribution>[] = [
+    {
+      accessorKey: "name",
+      header: "Plan",
+      cell: ({ row }) => (
+        <Link
+          href={`/admin/contributions/${row.original.id}`}
+          className="font-medium hover:text-primary hover:underline underline-offset-4"
+        >
+          {row.original.name}
+        </Link>
+      ),
+    },
+    {
+      accessorKey: "amount",
+      header: "Amount",
+      cell: ({ row }) => (
+        <span className="tabular-nums">
+          {formatNaira(row.original.amount)} / {row.original.frequency}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "progress",
+      header: "Progress",
+      cell: ({ row }) => (
+        <span className="tabular-nums">{row.original.progress}%</span>
+      ),
+    },
+    {
+      accessorKey: "memberCount",
+      header: "Members",
+      cell: ({ row }) => <span>{row.original.memberCount}</span>,
+    },
+    {
+      accessorKey: "startDate",
+      header: "Starts",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {formatDate(row.original.startDate)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    },
+    {
+      accessorKey: "withdrawalDate",
+      header: "Withdrawal",
+      meta: { align: "right" },
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {formatDate(row.original.withdrawalDate)}
+        </span>
+      ),
+    },
+  ]
 
   return (
     <div className="flex flex-col gap-8">
@@ -41,50 +95,10 @@ export default function AdminContributionsPage() {
           <Skeleton className="h-10 w-full rounded-xl" />
         </div>
       ) : (
-        <div className="rounded-xl border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Plan</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Progress</TableHead>
-                <TableHead>Members</TableHead>
-                <TableHead>Starts</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Withdrawal</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(data ?? []).map((contribution: Contribution) => (
-                <TableRow key={contribution.id}>
-                  <TableCell>
-                    <Link
-                      href={`/admin/contributions/${contribution.id}`}
-                      className="font-medium hover:text-primary hover:underline underline-offset-4"
-                    >
-                      {contribution.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatNaira(contribution.amount)} / {contribution.frequency}
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    {contribution.progress}%
-                  </TableCell>
-                  <TableCell>{contribution.memberCount}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(contribution.startDate)}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={contribution.status} />
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
-                    {formatDate(contribution.withdrawalDate)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <div className="overflow-hidden rounded-xl bg-card shadow-sm">
+          <div className="overflow-x-auto">
+            <DataTable columns={columns} data={data ?? []} />
+          </div>
         </div>
       )}
     </div>

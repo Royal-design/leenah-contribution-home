@@ -1,12 +1,7 @@
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import type { ColumnDef } from "@tanstack/react-table"
+
 import { Badge } from "@/components/ui/badge"
+import { DataTable } from "@/components/ui/data-table"
 import {
   transactionStatusMeta,
   transactionTypeMeta,
@@ -20,61 +15,72 @@ export function TransactionTable({
 }: {
   transactions: Transaction[]
 }) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Transaction</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Date</TableHead>
-          <TableHead>Reference</TableHead>
-          <TableHead className="text-right">Amount</TableHead>
-          <TableHead>Status</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {transactions.map((transaction) => {
-          const type = transactionTypeMeta[transaction.type]
-          const status = transactionStatusMeta[transaction.status]
-          const isIncoming = transaction.type !== "withdrawal"
+  const columns: ColumnDef<Transaction>[] = [
+    {
+      accessorKey: "description",
+      header: "Transaction",
+      cell: ({ row }) => (
+        <p className="max-w-[16rem] truncate font-medium">
+          {row.original.description}
+        </p>
+      ),
+    },
+    {
+      accessorKey: "type",
+      header: "Type",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="font-normal capitalize">
+          {transactionTypeMeta[row.original.type].label}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: "date",
+      header: "Date",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {formatDate(row.original.date)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "reference",
+      header: "Reference",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.reference}</span>
+      ),
+    },
+    {
+      accessorKey: "amount",
+      header: () => <span>Amount</span>,
+      cell: ({ row }) => {
+        const isIncoming = row.original.type !== "withdrawal"
+        return (
+          <span
+            className={cn(
+              "font-medium tabular-nums",
+              isIncoming ? "text-success" : "text-destructive"
+            )}
+          >
+            {isIncoming ? "+" : "-"}
+            {formatNaira(row.original.amount)}
+          </span>
+        )
+      },
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <Badge
+          variant="outline"
+          className={cn("font-medium", transactionStatusMeta[row.original.status].className)}
+        >
+          {transactionStatusMeta[row.original.status].label}
+        </Badge>
+      ),
+    },
+  ]
 
-          return (
-            <TableRow key={transaction.id}>
-              <TableCell className="max-w-[16rem]">
-                <p className="truncate font-medium">{transaction.description}</p>
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className="font-normal capitalize">
-                  {type.label}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatDate(transaction.date)}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {transaction.reference}
-              </TableCell>
-              <TableCell
-                className={cn(
-                  "text-right font-medium tabular-nums",
-                  isIncoming ? "text-success" : "text-destructive"
-                )}
-              >
-                {isIncoming ? "+" : "-"}
-                {formatNaira(transaction.amount)}
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant="outline"
-                  className={cn("font-medium", status.className)}
-                >
-                  {status.label}
-                </Badge>
-              </TableCell>
-            </TableRow>
-          )
-        })}
-      </TableBody>
-    </Table>
-  )
+  return <DataTable columns={columns} data={transactions} />
 }

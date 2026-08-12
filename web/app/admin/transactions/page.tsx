@@ -26,10 +26,12 @@ export default function AdminTransactionsPage() {
         </div>
       ) : data && data.length > 0 ? (
         <>
-          <div className="hidden rounded-xl border bg-card md:block">
-            <TransactionTable transactions={data} />
+          <div className="hidden overflow-hidden rounded-xl bg-card shadow-sm md:block">
+            <div className="overflow-x-auto">
+              <TransactionTable transactions={data} />
+            </div>
           </div>
-          <div className="rounded-xl border bg-card md:hidden">
+          <div className="rounded-xl bg-card shadow-sm md:hidden">
             <TransactionsList transactions={data} />
           </div>
         </>

@@ -15,7 +15,7 @@ export default function AuthLayout({
     <div className="grid min-h-svh lg:grid-cols-2">
       <div className="relative hidden overflow-hidden lg:block">
         <Image
-          src="/images/auth/auth-cover.svg"
+          src="/savings.webp"
           alt="LCH contribution and savings illustration"
           fill
           priority
@@ -23,7 +23,7 @@ export default function AuthLayout({
           className="object-cover"
         />
         <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/25 to-transparent p-12">
-          <p className="max-w-md text-2xl font-semibold leading-snug text-white">
+          <p className="max-w-md text-2xl leading-snug font-semibold text-white">
             Build better financial habits, together.
           </p>
           <p className="mt-3 max-w-md text-sm text-white/80">
@@ -37,8 +37,8 @@ export default function AuthLayout({
         <div className="flex h-16 items-center px-6 sm:px-10">
           <Brand href="/" />
         </div>
-        <div className="flex flex-1 items-center justify-center px-6 py-10 sm:px-10">
-          <div className="w-full max-w-md">{children}</div>
+        <div className="flex flex-1 flex-col overflow-y-auto px-6 py-8 sm:px-10">
+          <div className="my-auto w-full max-w-md">{children}</div>
         </div>
       </div>
     </div>

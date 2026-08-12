@@ -120,7 +120,3 @@ function GrowthBars({
     </div>
   )
 }
-
-export const metadata = {
-  title: "Admin Dashboard",
-}

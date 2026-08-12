@@ -2,26 +2,20 @@
 
 import * as React from "react"
 import { Check, X } from "lucide-react"
+import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { DataTable } from "@/components/ui/data-table"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { useAdminWithdrawals, useReviewWithdrawal } from "@/hooks/queries/use-admin"
 import { formatDate, formatNaira } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { WithdrawalStatus } from "@/types"
+import type { Withdrawal } from "@/types"
 
-const statusMeta: Record<WithdrawalStatus, { label: string; className: string }> = {
+const statusMeta: Record<Withdrawal["status"], { label: string; className: string }> = {
   pending: {
     label: "Pending",
     className: "border-transparent bg-warning/15 text-warning dark:bg-warning/20",
@@ -40,19 +34,11 @@ const statusMeta: Record<WithdrawalStatus, { label: string; className: string }>
   },
 }
 
-function WithdrawalsTable({
+export function WithdrawalsTable({
   items,
   onReview,
 }: {
-  items: Array<{
-    id: string
-    userName: string
-    amount: number
-    type: string
-    requestedAt: string
-    destination: string
-    status: WithdrawalStatus
-  }>
+  items: Withdrawal[]
   onReview: (withdrawal: {
     id: string
     name: string
@@ -60,93 +46,110 @@ function WithdrawalsTable({
     action: "approved" | "rejected"
   }) => void
 }) {
-  return (
-      <div className="rounded-xl border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Requested</TableHead>
-              <TableHead>Destination</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(items ?? []).map((withdrawal) => {
-              const status = statusMeta[withdrawal.status]
-              return (
-                <TableRow key={withdrawal.id}>
-                  <TableCell className="font-medium">{withdrawal.userName}</TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatNaira(withdrawal.amount)}
-                  </TableCell>
-                  <TableCell className="capitalize text-muted-foreground">
-                    {withdrawal.type}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(withdrawal.requestedAt)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {withdrawal.destination}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={cn("font-medium", status.className)}>
-                      {status.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {withdrawal.status === "pending" ? (
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Approve ${withdrawal.userName}'s withdrawal`}
-                          onClick={() =>
-                            onReview({
-                              id: withdrawal.id,
-                              name: withdrawal.userName,
-                              amount: withdrawal.amount,
-                              action: "approved",
-                            })
-                          }
-                        >
-                          <Check className="text-success" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Reject ${withdrawal.userName}'s withdrawal`}
-                          onClick={() =>
-                            onReview({
-                              id: withdrawal.id,
-                              name: withdrawal.userName,
-                              amount: withdrawal.amount,
-                              action: "rejected",
-                            })
-                          }
-                        >
-                          <X className="text-destructive" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        {withdrawal.status}
-                      </span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    )
-  }
+  const columns: ColumnDef<Withdrawal>[] = [
+    {
+      accessorKey: "userName",
+      header: "User",
+      cell: ({ row }) => (
+        <span className="font-medium">{row.original.userName}</span>
+      ),
+    },
+    {
+      accessorKey: "amount",
+      header: "Amount",
+      cell: ({ row }) => (
+        <span className="tabular-nums">{formatNaira(row.original.amount)}</span>
+      ),
+    },
+    {
+      accessorKey: "type",
+      header: "Type",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground capitalize">{row.original.type}</span>
+      ),
+    },
+    {
+      accessorKey: "requestedAt",
+      header: "Requested",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {formatDate(row.original.requestedAt)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "destination",
+      header: "Destination",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.destination}</span>
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = statusMeta[row.original.status]
+        return (
+          <Badge variant="outline" className={cn("font-medium", status.className)}>
+            {status.label}
+          </Badge>
+        )
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      meta: { align: "right" },
+      cell: ({ row }) => {
+        if (row.original.status !== "pending") {
+          return (
+            <span className="text-xs text-muted-foreground">
+              {row.original.status}
+            </span>
+          )
+        }
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Approve ${row.original.userName}'s withdrawal`}
+              onClick={() =>
+                onReview({
+                  id: row.original.id,
+                  name: row.original.userName,
+                  amount: row.original.amount,
+                  action: "approved",
+                })
+              }
+            >
+              <Check className="text-success" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Reject ${row.original.userName}'s withdrawal`}
+              onClick={() =>
+                onReview({
+                  id: row.original.id,
+                  name: row.original.userName,
+                  amount: row.original.amount,
+                  action: "rejected",
+                })
+              }
+            >
+              <X className="text-destructive" />
+            </Button>
+          </div>
+        )
+      },
+    },
+  ]
 
-  export default function AdminWithdrawalsPage() {
+  return <DataTable columns={columns} data={items} emptyText="No withdrawals found." />
+}
+
+export default function AdminWithdrawalsPage() {
   const { data, isPending } = useAdminWithdrawals()
   const reviewWithdrawal = useReviewWithdrawal()
   const [pendingReview, setPendingReview] = React.useState<{
@@ -180,11 +183,13 @@ function WithdrawalsTable({
                 {pendingItems.length}
               </span>
             </h2>
-            <div className="mt-4">
-              <WithdrawalsTable
-                items={pendingItems}
-                onReview={setPendingReview}
-              />
+            <div className="mt-4 overflow-hidden rounded-xl bg-card shadow-sm">
+              <div className="overflow-x-auto">
+                <WithdrawalsTable
+                  items={pendingItems}
+                  onReview={setPendingReview}
+                />
+              </div>
             </div>
           </section>
 
@@ -195,11 +200,13 @@ function WithdrawalsTable({
                 {resolvedItems.length}
               </span>
             </h2>
-            <div className="mt-4">
-              <WithdrawalsTable
-                items={resolvedItems}
-                onReview={setPendingReview}
-              />
+            <div className="mt-4 overflow-hidden rounded-xl bg-card shadow-sm">
+              <div className="overflow-x-auto">
+                <WithdrawalsTable
+                  items={resolvedItems}
+                  onReview={setPendingReview}
+                />
+              </div>
             </div>
           </section>
         </>

@@ -142,27 +142,23 @@ export default function DashboardPage() {
 
       <section className="grid gap-6 lg:grid-cols-2">
         {next && (
-          <Card className="bg-primary text-primary-foreground">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-primary-foreground">
-                Upcoming contribution
-              </CardTitle>
-              <CardDescription className="text-primary-foreground/75">
-                {next.name}
-              </CardDescription>
+              <CardTitle>Upcoming contribution</CardTitle>
+              <CardDescription>{next.name}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="flex items-end justify-between gap-3">
                 <p className="text-3xl font-semibold tabular-nums">
                   {formatNaira(next.amount)}
                 </p>
-                <Badge className="border-transparent bg-white/15 text-primary-foreground">
+                <Badge className="border-transparent bg-primary/10 text-primary dark:bg-primary/20">
                   {relativeDate(next.nextPaymentDate)}
                 </Badge>
               </div>
-              <p className="text-sm text-primary-foreground/75">
+              <p className="text-sm text-muted-foreground">
                 Next payment due{" "}
-                <span className="font-medium">
+                <span className="font-medium text-foreground">
                   {formatDate(next.nextPaymentDate)}
                 </span>
               </p>
