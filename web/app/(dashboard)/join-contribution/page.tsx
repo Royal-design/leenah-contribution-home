@@ -59,12 +59,13 @@ const formSchema = z
   })
 
 type FormValues = z.infer<typeof formSchema>
+type FormInput = z.input<typeof formSchema>
 
 export default function JoinContributionPage() {
   const router = useRouter()
   const joinContribution = useJoinContribution()
 
-  const form = useForm<FormValues>({
+  const form = useForm<FormInput, any, FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       planId: "",
