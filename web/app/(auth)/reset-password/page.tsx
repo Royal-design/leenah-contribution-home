@@ -33,6 +33,14 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>
 
 export default function ResetPasswordPage() {
+  return (
+    <React.Suspense>
+      <ResetPasswordForm />
+    </React.Suspense>
+  )
+}
+
+function ResetPasswordForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get("token")

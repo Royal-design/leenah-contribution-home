@@ -29,7 +29,7 @@ const inviteSchema = z.object({
   firstName: z.string().trim().min(2, "Enter a first name."),
   lastName: z.string().trim().min(2, "Enter a last name."),
   email: z.string().trim().min(1, "Enter an email address.").email("Enter a valid email address."),
-  role: z.enum(["user", "admin"], "Select a role."),
+  role: z.enum(["user", "admin"], { message: "Select a role." }),
 })
 
 type InviteValues = z.infer<typeof inviteSchema>

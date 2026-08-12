@@ -27,7 +27,7 @@ import type { Contribution } from "@/types"
 
 const formSchema = z.object({
   amount: z.coerce
-    .number("Enter a valid amount.")
+    .number({ message: "Enter a valid amount." })
     .int("Amount must be a whole number.")
     .positive("Amount must be greater than zero.")
 })
