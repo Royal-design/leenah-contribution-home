@@ -22,17 +22,27 @@ export function AppShell({
   const router = useRouter()
   const pathname = usePathname()
   const user = useAuthStore((state) => state.user)
+  const status = useAuthStore((state) => state.status)
   const [fundingOpen, setFundingOpen] = React.useState(false)
 
   const navGroups = isAdmin ? adminNavGroups : userNavGroups
 
   React.useEffect(() => {
-    if (!user) {
+    if (status === "authenticated" && isAdmin && user?.role !== "admin") {
+      router.replace("/dashboard")
+      return
+    }
+
+    if (status === "unauthenticated") {
       router.replace("/login")
     }
-  }, [user, router])
+  }, [status, user, isAdmin, router])
 
-  if (!user) {
+  if (status !== "authenticated" || !user) {
+    return null
+  }
+
+  if (isAdmin && user.role !== "admin") {
     return null
   }
 

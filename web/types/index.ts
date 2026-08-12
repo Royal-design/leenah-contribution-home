@@ -1,6 +1,6 @@
 export type Role = "user" | "admin"
 
-export type UserStatus = "active" | "suspended"
+export type UserStatus = "active" | "suspended" | "invited"
 
 export interface User {
   id: string
@@ -91,7 +91,7 @@ export interface SavingsAccount {
 
 export type TransactionType = "contribution" | "savings" | "funding" | "withdrawal"
 
-export type TransactionStatus = "successful" | "pending" | "failed"
+export type TransactionStatus = "successful" | "pending" | "failed" | "reverted"
 
 export interface Transaction {
   id: string

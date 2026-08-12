@@ -20,6 +20,12 @@ export function apiGetCurrentUser(): Promise<User> {
   return mockRequest(user)
 }
 
+export function apiDeleteAccount(userId: string): Promise<void> {
+  return mockMutation(() => {
+    getDb().users = getDb().users.filter((entry) => entry.id !== userId)
+  }, 500)
+}
+
 export function apiRegister(payload: RegisterPayload): Promise<User> {
   return mockMutation(() => {
     const existing = getDb().users.find(

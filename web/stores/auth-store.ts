@@ -3,7 +3,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { User } from "@/types"
-import { apiLogin, apiRegister, type RegisterPayload } from "@/lib/api/auth"
+import { apiDeleteAccount, apiLogin, apiRegister, type RegisterPayload } from "@/lib/api/auth"
 
 interface AuthState {
   user: User | null
@@ -12,6 +12,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<User>
   register: (payload: RegisterPayload) => Promise<User>
   setUser: (user: User | null) => void
+  deleteAccount: () => Promise<void>
   logout: () => void
 }
 
@@ -48,6 +49,13 @@ export const useAuthStore = create<AuthState>()(
           user,
           status: user ? "authenticated" : "unauthenticated",
         }),
+      deleteAccount: async () => {
+        const current = useAuthStore.getState().user
+        if (current) {
+          await apiDeleteAccount(current.id)
+        }
+        set({ user: null, status: "unauthenticated", loading: false })
+      },
       logout: () => set({ user: null, status: "unauthenticated", loading: false }),
     }),
     {

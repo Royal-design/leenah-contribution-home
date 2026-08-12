@@ -8,10 +8,17 @@ import { useAuthStore } from "@/stores/auth-store"
 export default function RootPage() {
   const router = useRouter()
   const user = useAuthStore((state) => state.user)
+  const status = useAuthStore((state) => state.status)
 
   useEffect(() => {
-    router.replace(user ? "/dashboard" : "/login")
-  }, [user, router])
+    if (status === "authenticated" && user) {
+      router.replace(user.role === "admin" ? "/admin/dashboard" : "/dashboard")
+      return
+    }
+    if (status === "unauthenticated") {
+      router.replace("/login")
+    }
+  }, [status, user, router])
 
   return (
     <div className="flex min-h-svh items-center justify-center">

@@ -6,10 +6,16 @@ import { PageHeader } from "@/components/shared/page-header"
 import { TransactionTable } from "@/components/transactions/transaction-table"
 import { TransactionsList } from "@/components/transactions/transaction-list"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { useTransactions } from "@/hooks/queries/use-transactions"
+import { useRevertTransaction } from "@/hooks/queries/use-admin"
+import { formatNaira } from "@/lib/format"
+import type { Transaction } from "@/types"
 
 export default function AdminTransactionsPage() {
   const { data, isPending } = useTransactions()
+  const revertTransaction = useRevertTransaction()
+  const [pendingRevert, setPendingRevert] = React.useState<Transaction | null>(null)
 
   return (
     <div className="flex flex-col gap-8">
@@ -28,7 +34,7 @@ export default function AdminTransactionsPage() {
         <>
           <div className="hidden overflow-hidden rounded-xl bg-card shadow-sm md:block">
             <div className="overflow-x-auto">
-              <TransactionTable transactions={data} />
+              <TransactionTable transactions={data} onRevert={setPendingRevert} />
             </div>
           </div>
           <div className="rounded-xl bg-card shadow-sm md:hidden">
@@ -40,6 +46,24 @@ export default function AdminTransactionsPage() {
           No transactions yet.
         </p>
       )}
+
+      <ConfirmDialog
+        open={!!pendingRevert}
+        onOpenChange={(open) => !open && setPendingRevert(null)}
+        title="Revert transaction?"
+        description={
+          pendingRevert
+            ? `Mark the failed ${formatNaira(pendingRevert.amount)} transaction as reverted? This reverses its effect on balances.`
+            : ""
+        }
+        confirmLabel="Revert"
+        loading={revertTransaction.isPending}
+        onConfirm={() => {
+          if (!pendingRevert) return
+          revertTransaction.mutate(pendingRevert.id)
+          setPendingRevert(null)
+        }}
+      />
     </div>
   )
 }

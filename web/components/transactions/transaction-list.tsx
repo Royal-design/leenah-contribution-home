@@ -45,6 +45,10 @@ export const transactionStatusMeta: Record<
     className:
       "border-transparent bg-destructive/15 text-destructive dark:bg-destructive/20",
   },
+  reverted: {
+    label: "Reverted",
+    className: "border-transparent bg-muted text-muted-foreground dark:bg-muted/40",
+  },
 }
 
 function TransactionTypeIcon({

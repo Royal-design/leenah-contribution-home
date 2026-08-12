@@ -1,10 +1,13 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import * as z from "zod"
 import { toast } from "sonner"
+import { Trash2 } from "lucide-react"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -18,6 +21,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { useAuthStore } from "@/stores/auth-store"
 import { formatDate, getInitials } from "@/lib/format"
 
@@ -35,8 +39,12 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>
 
 export default function ProfilePage() {
+  const router = useRouter()
   const user = useAuthStore((state) => state.user)
   const setUser = useAuthStore((state) => state.setUser)
+  const deleteAccount = useAuthStore((state) => state.deleteAccount)
+  const [confirmDelete, setConfirmDelete] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -52,6 +60,18 @@ export default function ProfilePage() {
     if (!user) return
     setUser({ ...user, ...values })
     toast.success("Profile updated successfully.")
+  }
+
+  async function onConfirmDelete() {
+    setDeleting(true)
+    try {
+      await deleteAccount()
+      toast.success("Your account has been deleted.")
+      router.replace("/login")
+    } catch (error) {
+      setDeleting(false)
+      toast.error(error instanceof Error ? error.message : "Could not delete account.")
+    }
   }
 
   if (!user) {
@@ -215,7 +235,45 @@ export default function ProfilePage() {
             </dl>
           </CardContent>
         </Card>
+
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle className="text-destructive">Danger zone</CardTitle>
+            <CardDescription>
+              Irreversible actions on your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">Delete account</p>
+                <p className="text-sm text-muted-foreground">
+                  Permanently remove your account and all associated data.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 />
+                Delete account
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete your account?"
+        description="This permanently deletes your account, contributions, savings, and transaction history. This action cannot be undone."
+        confirmLabel="Delete account"
+        destructive
+        loading={deleting}
+        onConfirm={onConfirmDelete}
+      />
     </div>
   )
 }

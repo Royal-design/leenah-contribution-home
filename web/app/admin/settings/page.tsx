@@ -1,10 +1,12 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import * as z from "zod"
+import { Trash2 } from "lucide-react"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
@@ -18,6 +20,8 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { useAuthStore } from "@/stores/auth-store"
 
 const settingsSchema = z.object({
   platformName: z.string().trim().min(2, "Platform name is required."),
@@ -34,7 +38,11 @@ const settingsSchema = z.object({
 type SettingsValues = z.infer<typeof settingsSchema>
 
 export default function AdminSettingsPage() {
+  const router = useRouter()
   const [pending, setPending] = React.useState(false)
+  const deleteAccount = useAuthStore((state) => state.deleteAccount)
+  const [confirmDelete, setConfirmDelete] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
 
   const form = useForm<SettingsValues>({
     resolver: zodResolver(settingsSchema),
@@ -55,6 +63,18 @@ export default function AdminSettingsPage() {
       toast.success("Platform settings saved.")
       form.reset(values)
     }, 600)
+  }
+
+  async function onConfirmDelete() {
+    setDeleting(true)
+    try {
+      await deleteAccount()
+      toast.success("Your admin account has been deleted.")
+      router.replace("/login")
+    } catch (error) {
+      setDeleting(false)
+      toast.error(error instanceof Error ? error.message : "Could not delete account.")
+    }
   }
 
   return (
@@ -218,6 +238,44 @@ export default function AdminSettingsPage() {
           {pending ? "Saving…" : "Save settings"}
         </Button>
       </form>
+
+      <div className="flex max-w-3xl flex-col gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-destructive">Danger zone</CardTitle>
+            <CardDescription>Irreversible actions for your admin account.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">Delete admin account</p>
+                <p className="text-sm text-muted-foreground">
+                  Permanently remove your account and all associated data.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 />
+                Delete account
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete your account?"
+        description="This permanently deletes your admin account and all associated data. This action cannot be undone."
+        confirmLabel="Delete account"
+        destructive
+        loading={deleting}
+        onConfirm={onConfirmDelete}
+      />
     </div>
   )
 }
