@@ -1,10 +1,8 @@
 {
-  "framework": "nextjs",
-  "rootDirectory": "web",
   "redirects": [
     {
-      "source": "/admin",
-      "destination": "/admin/dashboard",
+     "source": "/index.html",
+      "destination": "/",
       "permanent": true
     }
   ]
