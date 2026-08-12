@@ -6,10 +6,11 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import * as z from "zod"
 import { toast } from "sonner"
-import { Trash2 } from "lucide-react"
+import { Camera, IdCard, ShieldCheck, Mail, Phone, Plus, Trash2, UserRound } from "lucide-react"
 
 import { PageHeader } from "@/components/shared/page-header"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -23,6 +24,7 @@ import { Input } from "@/components/ui/input"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { useAuthStore } from "@/stores/auth-store"
 import { formatDate, getInitials } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
 const formSchema = z.object({
   firstName: z.string().trim().min(2, "Enter your first name."),
@@ -37,6 +39,12 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>
 
+const statusTone: Record<string, string> = {
+  active: "border-transparent bg-success/15 text-success dark:bg-success/20",
+  suspended: "border-transparent bg-warning/15 text-warning dark:bg-warning/20",
+  invited: "border-transparent bg-info/15 text-info dark:bg-info/25",
+}
+
 export default function ProfilePage() {
   const router = useRouter()
   const user = useAuthStore((state) => state.user)
@@ -44,6 +52,7 @@ export default function ProfilePage() {
   const deleteAccount = useAuthStore((state) => state.deleteAccount)
   const [confirmDelete, setConfirmDelete] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -59,6 +68,25 @@ export default function ProfilePage() {
     if (!user) return
     setUser({ ...user, ...values })
     toast.success("Profile updated successfully.")
+  }
+
+  function onPhotoPicked(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file.")
+      return
+    }
+
+    const preview = URL.createObjectURL(file)
+    if (user) {
+      setUser({ ...user, photo: preview })
+    }
+    toast.success("Profile photo updated.")
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   async function onConfirmDelete() {
@@ -85,31 +113,94 @@ export default function ProfilePage() {
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile picture</CardTitle>
-            <CardDescription>This is how others see you.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center gap-4">
-            <Avatar size="lg">
-              <AvatarImage
-                src={user.avatar}
-                alt={`${user.firstName} ${user.lastName}`}
-                width={40}
-                height={40}
-              />
-              <AvatarFallback>
-                {getInitials(user.firstName, user.lastName)}
-              </AvatarFallback>
-            </Avatar>
-            <p className="text-center text-sm">
-              <span className="font-medium">
-                {user.firstName} {user.lastName}
-              </span>
-            </p>
-            <Button variant="outline" size="sm">
-              Change photo
-            </Button>
+        <Card className="overflow-hidden lg:col-span-3">
+          <div className="h-32 bg-gradient-to-r from-primary/80 via-primary to-primary/40 sm:h-40" aria-hidden="true" />
+          <CardContent className="relative">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+              <div className="-mt-20 flex flex-col gap-4 sm:flex-row sm:items-end">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="group relative shrink-0 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 rounded-full"
+                  aria-label="Change profile photo"
+                >
+                  <Avatar size="lg" className="size-28 shadow-lg ring-4 ring-background">
+                    <AvatarImage src={user.photo} alt={`${user.firstName} ${user.lastName}`} />
+                    <AvatarFallback className="text-2xl">
+                      {getInitials(user.firstName, user.lastName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <AvatarBadge className="size-8 translate-x-1 translate-y-1">
+                    <Camera className="size-3.5" aria-hidden="true" />
+                  </AvatarBadge>
+                </button>
+
+                <div className="flex flex-col gap-1 pb-1">
+                  <h2 className="font-heading text-2xl font-semibold tracking-tight">
+                    {user.firstName} {user.lastName}
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="capitalize font-medium">
+                      <ShieldCheck className="mr-1 size-3" aria-hidden="true" />
+                      {user.role}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn("font-medium capitalize", statusTone[user.status])}
+                    >
+                      {user.status}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Camera />
+                Change photo
+              </Button>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onPhotoPicked}
+            />
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Mail className="size-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p className="truncate text-sm font-medium">{user.email}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Phone className="size-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Phone</p>
+                  <p className="truncate text-sm font-medium">{user.phone || "Not set"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <IdCard className="size-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Member since</p>
+                  <p className="truncate text-sm font-medium">{formatDate(user.joinedAt)}</p>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -213,54 +304,60 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Account information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-              <div>
-                <dt className="text-muted-foreground">Member since</dt>
-                <dd className="font-medium">{formatDate(user.joinedAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Account role</dt>
-                <dd className="font-medium capitalize">{user.role}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Account status</dt>
-                <dd className="font-medium capitalize">{user.status}</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-muted">
+                  <UserRound className="size-4" aria-hidden="true" />
+                </span>
+                Account
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="flex flex-col gap-4 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Member since</dt>
+                  <dd className="text-right font-medium">{formatDate(user.joinedAt)}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Account role</dt>
+                  <dd className="font-medium capitalize">{user.role}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Account status</dt>
+                  <dd className="font-medium capitalize">{user.status}</dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
 
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle className="text-destructive">Danger zone</CardTitle>
-            <CardDescription>
-              Irreversible actions on your account.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium">Delete account</p>
-                <p className="text-sm text-muted-foreground">
-                  Permanently remove your account and all associated data.
-                </p>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-destructive">Danger zone</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:w-full">
+                  <div>
+                    <p className="text-sm font-medium">Delete account</p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      Permanently remove your account and all data.
+                    </p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    <Trash2 />
+                    Delete
+                  </Button>
+                </div>
               </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setConfirmDelete(true)}
-              >
-                <Trash2 />
-                Delete account
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <ConfirmDialog

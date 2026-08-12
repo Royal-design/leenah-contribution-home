@@ -11,6 +11,7 @@ export interface User {
   role: Role
   status: UserStatus
   avatar?: string
+  photo?: string
   joinedAt: string
   createdAt: string
 }

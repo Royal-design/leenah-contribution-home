@@ -53,7 +53,7 @@ export function AppShell({
       <div className="lg:pl-64">
         <TopHeader isAdmin={isAdmin} />
 
-        <main className="mx-auto max-w-7xl px-4 pb-28 pt-6 sm:px-6 lg:pb-10">
+        <main className="mx-auto max-w-7xl overflow-x-hidden px-4 pb-32 pt-6 sm:px-6 lg:pb-10">
           {children}
         </main>
       </div>
