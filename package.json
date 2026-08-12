@@ -1,0 +1,15 @@
+{
+  "name": "lch",
+  "version": "0.0.1",
+  "private": true,
+  "workspaces": ["web", "backend"],
+  "scripts": {
+    "dev": "bun run --cwd web dev",
+    "dev:web": "bun run --cwd web dev",
+    "build": "bun run --cwd web build",
+    "start": "bun run --cwd web start",
+    "lint": "bun run --cwd web lint",
+    "format": "bun run --cwd web format",
+    "typecheck": "bun run --cwd web typecheck"
+  }
+}
