@@ -1,0 +1,32 @@
+import { Skeleton } from "@/components/ui/skeleton"
+
+export function StatSkeleton() {
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <Skeleton className="h-4 w-24" />
+      <Skeleton className="h-7 w-32" />
+      <Skeleton className="h-3 w-20" />
+    </div>
+  )
+}
+
+export function PageSkeleton() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-4 w-64" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatSkeleton />
+        <StatSkeleton />
+        <StatSkeleton />
+        <StatSkeleton />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Skeleton className="h-64 rounded-xl" />
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    </div>
+  )
+}

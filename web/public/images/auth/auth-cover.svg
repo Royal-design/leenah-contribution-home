@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1d3a"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.05"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.35" cy="0.25" r="0.8">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="1200" fill="url(#bg)"/>
+  <rect width="1600" height="1200" fill="url(#glow)"/>
+
+  <g opacity="0.16">
+    <circle cx="120" cy="180" r="8" fill="#ffffff"/>
+    <circle cx="380" cy="90" r="5" fill="#ffffff"/>
+    <circle cx="620" cy="160" r="7" fill="#ffffff"/>
+    <circle cx="900" cy="80" r="5" fill="#ffffff"/>
+    <circle cx="1200" cy="140" r="8" fill="#ffffff"/>
+    <circle cx="1480" cy="70" r="5" fill="#ffffff"/>
+    <circle cx="210" cy="980" r="6" fill="#ffffff"/>
+    <circle cx="700" cy="1080" r="8" fill="#ffffff"/>
+    <circle cx="1100" cy="1000" r="6" fill="#ffffff"/>
+    <circle cx="1420" cy="1100" r="7" fill="#ffffff"/>
+  </g>
+
+  <g transform="translate(240,300)">
+    <rect x="0" y="0" width="380" height="460" rx="28" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.18"/>
+    <rect x="40" y="40" width="120" height="18" rx="9" fill="#ffffff" fill-opacity="0.28"/>
+    <rect x="40" y="86" width="300" height="46" rx="10" fill="#ffffff" fill-opacity="0.90"/>
+    <rect x="40" y="148" width="220" height="18" rx="9" fill="#ffffff" fill-opacity="0.45"/>
+    <rect x="40" y="182" width="260" height="14" rx="7" fill="#ffffff" fill-opacity="0.25"/>
+    <rect x="40" y="230" width="300" height="10" rx="5" fill="#ffffff" fill-opacity="0.30"/>
+    <rect x="40" y="250" width="300" height="4" rx="2" fill="#60a5fa"/>
+    <rect x="40" y="300" width="140" height="46" rx="10" fill="#ffffff" fill-opacity="0.90"/>
+    <path d="M170 323 h70 M230 310 v26" stroke="#1e3a8a" stroke-width="5" stroke-linecap="round" fill="none"/>
+  </g>
+
+  <g transform="translate(760,520)">
+    <g>
+      <circle cx="0" cy="0" r="130" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="18"/>
+      <path d="M0 0 A130 130 0 0 1 126 32" fill="none" stroke="#3b82f6" stroke-width="18" stroke-linecap="round"/>
+      <circle cx="126" cy="32" r="10" fill="#60a5fa"/>
+    </g>
+    <text x="0" y="-28" text-anchor="middle" fill="#ffffff" fill-opacity="0.7" font-family="sans-serif" font-size="26">72% saved</text>
+    <text x="0" y="120" text-anchor="middle" fill="#ffffff" fill-opacity="0.85" font-family="sans-serif" font-size="40" font-weight="700">₦720,000</text>
+  </g>
+
+  <text x="120" y="1080" fill="#ffffff" fill-opacity="0.75" font-family="sans-serif" font-size="54" font-weight="700">Build better financial</text>
+  <text x="120" y="1140" fill="#ffffff" fill-opacity="0.75" font-family="sans-serif" font-size="54" font-weight="700">habits, together.</text>
+</svg>

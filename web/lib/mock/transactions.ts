@@ -1,0 +1,130 @@
+import type { Transaction } from "@/types"
+import { addDays, iso, TODAY } from "@/lib/mock/dates"
+
+export const transactions: Transaction[] = [
+  {
+    id: "txn_001",
+    type: "contribution",
+    status: "successful",
+    amount: 25000,
+    description: "Monthly Growth Circle – monthly contribution",
+    date: iso(addDays(TODAY, -25)),
+    reference: "LCH-88291034",
+    metadata: {
+      contributionName: "Monthly Growth Circle",
+      method: "Wallet",
+    },
+  },
+  {
+    id: "txn_002",
+    type: "savings",
+    status: "successful",
+    amount: 15000,
+    description: "Transfer to Emergency Fund goal",
+    date: iso(addDays(TODAY, -18)),
+    reference: "LCH-88120010",
+    metadata: {
+      method: "Wallet",
+    },
+  },
+  {
+    id: "txn_003",
+    type: "funding",
+    status: "successful",
+    amount: 80000,
+    description: "Wallet top-up via Bank Transfer",
+    date: iso(addDays(TODAY, -14)),
+    reference: "LCH-87910092",
+    metadata: {
+      method: "Bank Transfer",
+    },
+  },
+  {
+    id: "txn_004",
+    type: "withdrawal",
+    status: "successful",
+    amount: 50000,
+    description: "Savings withdrawal to GTBank (0123456789)",
+    date: iso(addDays(TODAY, -10)),
+    reference: "LCH-87654001",
+    metadata: {
+      method: "Bank Transfer",
+      destination: "GTBank ••6789",
+    },
+  },
+  {
+    id: "txn_005",
+    type: "contribution",
+    status: "successful",
+    amount: 50000,
+    description: "Workplace Savings Pool – biweekly contribution",
+    date: iso(addDays(TODAY, -4)),
+    reference: "LCH-87550030",
+    metadata: {
+      contributionName: "Workplace Savings Pool",
+      method: "Wallet",
+    },
+  },
+  {
+    id: "txn_006",
+    type: "savings",
+    status: "pending",
+    amount: 25000,
+    description: "Transfer to New Car goal",
+    date: iso(addDays(TODAY, -1)),
+    reference: "LCH-87490018",
+    metadata: {
+      method: "Card",
+    },
+  },
+  {
+    id: "txn_007",
+    type: "funding",
+    status: "failed",
+    amount: 30000,
+    description: "Wallet top-up via Card",
+    date: iso(addDays(TODAY, -2)),
+    reference: "LCH-87402299",
+    metadata: {
+      method: "Card",
+    },
+  },
+  {
+    id: "txn_008",
+    type: "withdrawal",
+    status: "pending",
+    amount: 20000,
+    description: "Contribution payout – Monthly Growth Circle",
+    date: iso(addDays(TODAY, 3)),
+    reference: "LCH-87001100",
+    metadata: {
+      contributionName: "Monthly Growth Circle",
+      destination: "Access Bank ••4412",
+    },
+  },
+  {
+    id: "txn_009",
+    type: "savings",
+    status: "successful",
+    amount: 40000,
+    description: "Transfer to Home Renovation goal",
+    date: iso(addDays(TODAY, -6)),
+    reference: "LCH-87330056",
+    metadata: {
+      method: "Wallet",
+    },
+  },
+  {
+    id: "txn_010",
+    type: "contribution",
+    status: "successful",
+    amount: 15000,
+    description: "Youth Venture Savings – monthly contribution",
+    date: iso(addDays(TODAY, -12)),
+    reference: "LCH-87760044",
+    metadata: {
+      contributionName: "Youth Venture Savings",
+      method: "Wallet",
+    },
+  },
+]
