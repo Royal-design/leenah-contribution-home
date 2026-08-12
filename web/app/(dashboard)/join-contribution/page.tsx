@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Controller, useForm } from "react-hook-form"
+import { Controller, useForm, type Resolver } from "react-hook-form"
 import * as z from "zod"
 import { CalendarDays, ChevronLeft } from "lucide-react"
 
@@ -59,14 +59,13 @@ const formSchema = z
   })
 
 type FormValues = z.infer<typeof formSchema>
-type FormInput = z.input<typeof formSchema>
 
 export default function JoinContributionPage() {
   const router = useRouter()
   const joinContribution = useJoinContribution()
 
-  const form = useForm<FormInput, any, FormValues>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema) as Resolver<FormValues>,
     defaultValues: {
       planId: "",
       amount: 25000,
