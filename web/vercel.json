@@ -1,0 +1,11 @@
+{
+  "framework": "nextjs",
+  "rootDirectory": "web",
+  "redirects": [
+    {
+      "source": "/admin",
+      "destination": "/admin/dashboard",
+      "permanent": true
+    }
+  ]
+}
