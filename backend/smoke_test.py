@@ -75,22 +75,10 @@ check(client.get("/api/savings/goals", headers=headers), "savings/goals list")
 # ---- Transactions (mine) ----
 check(client.get("/api/transactions", headers=headers), "transactions list")
 
-# ---- Contributions ----
-contrib = check(client.post("/api/contributions", headers=headers, json={
-    "name": "Christmas Savings",
-    "amount": 10000,
-    "frequency": "weekly",
-    "member_count": 6,
-    "rounds": 12,
-    "start_date": "2026-08-20T00:00:00Z",
-    "withdrawal_rule": "on_schedule",
-}), "contributions create")
-cid = contrib["data"]["id"]
+# ---- Contributions (users can only join; admin creates) ----
 check(client.get("/api/contributions", headers=headers), "contributions list")
-check(client.get(f"/api/contributions/{cid}", headers=headers), "contributions get")
-check(client.get("/api/contributions/open", headers=headers), "contributions open")
-check(client.post(f"/api/contributions/{cid}/pay", headers=headers, json={}), "contributions pay")
-check(client.patch(f"/api/contributions/{cid}", headers=headers, json={"is_open": False}), "contributions update")
+open_list = client.get("/api/contributions/open", headers=headers).json()["data"]["items"]
+assert isinstance(open_list, list), "open contributions should be a list"
 
 # ---- Withdrawals ----
 check(client.post("/api/withdrawals", headers=headers, json={
@@ -115,11 +103,6 @@ reg2 = check(client.post("/api/auth/register", json={
 }), "register user2", 200)
 headers2 = {"Authorization": f"Bearer {reg2['data']['access_token']}"}
 check(client.get("/api/contributions/open", headers=headers2), "contributions open user2")
-open_list = client.get("/api/contributions/open", headers=headers2).json()["data"]["items"]
-if open_list:
-    check(client.post(f"/api/contributions/{open_list[0]['id']}/join", headers=headers2), "contributions join user2")
-    m = client.get("/api/contributions/open", headers=headers2).json()
-    # creator closed the contribution above, so open may be empty; skip join if empty
 
 # ---- Admin ----
 with SessionLocal() as db:
@@ -139,6 +122,42 @@ check(client.get("/api/admin/users/{uid}".format(uid=reg2["data"]["user"]["id"])
 check(client.get("/api/admin/contributions", headers=admin_headers), "admin contributions")
 check(client.get("/api/admin/transactions", headers=admin_headers), "admin transactions")
 check(client.get("/api/admin/withdrawals", headers=admin_headers), "admin withdrawals")
+
+# Admin creates contribution -> user joins -> funds wallet -> pays (wallet flow)
+contrib = check(client.post("/api/admin/contributions", headers=admin_headers, json={
+    "name": "Christmas Savings",
+    "amount": 10000,
+    "frequency": "weekly",
+    "member_count": 6,
+    "rounds": 3,
+    "start_date": "2026-08-20T00:00:00Z",
+    "withdrawal_rule": "on_schedule",
+}), "admin create contribution")
+cid = contrib["data"]["id"]
+check(client.get(f"/api/contributions/{cid}", headers=headers), "contributions admin-created get")
+open_list = client.get("/api/contributions/open", headers=headers).json()["data"]["items"]
+assert open_list and any(p["id"] == cid for p in open_list), "contribution should be open"
+joined = check(client.post(f"/api/contributions/{cid}/join", headers=headers), "user joins contribution")
+assert joined["data"]["members"][0]["position"] == 1
+sched_id = joined["data"]["schedule"][0]["id"]
+assert joined["data"]["total_contributed"] == 0, "joining must not move money"
+check(client.post("/api/wallet/fund/mock", headers=headers, json={"amount": 20000}), "mock wallet funding")
+wallet = client.get("/api/savings/account", headers=headers).json()["data"]
+assert wallet["balance"] >= 10000, "wallet should be funded"
+check(client.post(f"/api/contributions/schedules/{sched_id}/pay", headers=headers, params={"contribution_id": cid}), "pay schedule from wallet")
+after = check(client.get(f"/api/contributions/{cid}", headers=headers), "contributions after pay")
+assert after["data"]["total_contributed"] == 10000, "total_contributed should be 10000"
+assert after["data"]["total_expected"] == 10000 * 6 * 3, "total_expected should be amount*members*rounds"
+assert after["data"]["progress"] == 6, f"progress should be 6, got {after['data']['progress']}"
+# duplicate payment protection
+check(client.post(f"/api/contributions/schedules/{sched_id}/pay", headers=headers, params={"contribution_id": cid}), "duplicate schedule pay rejected", 400)
+user_contrib = check(client.post("/api/contributions", headers=headers2, json={
+    "name": "Blocked User Create", "amount": 5000, "frequency": "monthly",
+    "member_count": 2, "rounds": 3, "start_date": "2026-09-01T00:00:00Z",
+}), "user create contribution blocked", 403)
+check(client.post(f"/api/contributions/{cid}/leave", headers=headers), "user leaves contribution")
+left = check(client.get(f"/api/contributions/{cid}", headers=admin_headers), "contribution after leave (admin)")
+assert left["data"]["total_contributed"] == 10000, "financial history preserved after leave"
 
 # Admin views audit log + revert + review withdrawal
 logs = check(client.get("/api/audit-logs", headers=admin_headers), "audit-logs list")

@@ -11,6 +11,7 @@ from app.models.enums import ContributionStatus, Frequency
 
 if TYPE_CHECKING:
     from app.models.contribution_member import ContributionMember
+    from app.models.contribution_payout import ContributionPayout
     from app.models.contribution_schedule import ContributionSchedule
     from app.models.user import User
 
@@ -56,3 +57,4 @@ class Contribution(Base):
     creator: Mapped["User"] = relationship()
     members: Mapped[list["ContributionMember"]] = relationship(back_populates="contribution", cascade="all, delete-orphan")
     schedule: Mapped[list["ContributionSchedule"]] = relationship(back_populates="contribution", cascade="all, delete-orphan")
+    payouts: Mapped[list["ContributionPayout"]] = relationship(back_populates="contribution", cascade="all, delete-orphan")

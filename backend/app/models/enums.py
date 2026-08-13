@@ -38,6 +38,24 @@ class ScheduleStatus(StrEnum):
     UPCOMING = "upcoming"
 
 
+class MemberStatus(StrEnum):
+    ACTIVE = "active"
+    LEFT = "left"
+    REMOVED = "removed"
+
+
+class FundingMethod(StrEnum):
+    WALLET = "wallet"
+    CARD = "card"
+    BANK_TRANSFER = "bank_transfer"
+
+
+class PayoutStatus(StrEnum):
+    PENDING = "pending"
+    PAID = "paid"
+    SKIPPED = "skipped"
+
+
 class WithdrawalRuleType(StrEnum):
     ON_SCHEDULE = "on_schedule"
     FIXED_DATE = "fixed_date"

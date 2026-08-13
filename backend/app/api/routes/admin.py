@@ -202,6 +202,12 @@ def admin_delete_contribution(
     return MessageResponse(message="Contribution deleted.")
 
 
+@router.post("/contributions/run-automatic")
+def run_automatic_contributions(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    result = contribution_service.run_automatic_contributions(db)
+    return SuccessResponse(message="Automatic contributions processed.", data=result)
+
+
 @router.post("/contributions/{contribution_id}/members", response_model=SuccessResponse[ContributionOut])
 def admin_add_contribution_member(
     contribution_id: uuid.UUID,

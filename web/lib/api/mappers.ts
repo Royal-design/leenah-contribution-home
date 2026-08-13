@@ -115,6 +115,7 @@ export function mapContribution(raw: RawContribution): Contribution {
   }))
 
   const schedule: ContributionScheduleEntry[] = (raw.schedule ?? []).map((entry) => ({
+    id: entry.id,
     period: entry.period,
     label: entry.label ?? `Round ${entry.period}`,
     dueDate: entry.due_date,

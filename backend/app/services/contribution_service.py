@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
@@ -10,26 +11,29 @@ from app.models.enums import (
     AuditAction,
     AuditCategory,
     ContributionStatus,
+    FundingMethod,
+    MemberStatus,
     NotificationType,
     ScheduleStatus,
-    TransactionStatus,
     TransactionType,
 )
 from app.models.user import User
 from app.repositories.audit_log_repository import audit_log_repository
 from app.repositories.contribution_repository import (
     contribution_member_repository,
+    contribution_payout_repository,
     contribution_repository,
     contribution_schedule_repository,
 )
-from app.repositories.transaction_repository import transaction_repository
 from app.repositories.user_repository import user_repository
-from app.services.notification_service import notification_service
 from app.schemas.contribution import (
     ContributionMemberOut,
     ContributionOut,
+    ContributionPayoutOut,
     ContributionScheduleOut,
 )
+from app.services.notification_service import notification_service
+from app.services.wallet_service import make_reference, wallet_service
 
 FREQUENCY_DAYS = {
     "weekly": 7,
@@ -39,12 +43,21 @@ FREQUENCY_DAYS = {
 }
 
 
-def _make_reference() -> str:
-    return f"CON-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class ContributionService:
-    def _build_out(self, contribution: Contribution) -> ContributionOut:
+    def _build_out(self, contribution: Contribution, *, member_id: uuid.UUID | None = None) -> ContributionOut:
+        members_in = [m for m in contribution.members if m.status == MemberStatus.ACTIVE]
+
+        if member_id is not None:
+            schedule_in = [s for s in contribution.schedule if s.member_id == member_id]
+            payouts_in = [p for p in contribution.payouts if p.member_id == member_id]
+        else:
+            schedule_in = [s for s in contribution.schedule if s.member_id is None]
+            payouts_in = list(contribution.payouts)
+
         return ContributionOut(
             id=contribution.id,
             name=contribution.name,
@@ -67,17 +80,56 @@ class ContributionService:
             is_open=contribution.is_open,
             created_by=contribution.created_by,
             created_at=contribution.created_at,
-            members=[ContributionMemberOut.model_validate(m) for m in contribution.members],
-            schedule=[ContributionScheduleOut.model_validate(s) for s in contribution.schedule],
+            members=[ContributionMemberOut.model_validate(m) for m in members_in],
+            schedule=[ContributionScheduleOut.model_validate(s) for s in schedule_in],
+            payouts=[ContributionPayoutOut.model_validate(p) for p in payouts_in],
         )
 
     def _compute_dates(self, start_date: datetime, frequency: str, rounds: int) -> list[datetime]:
         step = timedelta(days=FREQUENCY_DAYS.get(frequency, 30))
         return [start_date + step * i for i in range(rounds)]
 
+    def _member_id_for(self, db: Session, contribution_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID | None:
+        member = contribution_member_repository.get(db, contribution_id, user_id)
+        if member is not None and member.status == MemberStatus.ACTIVE:
+            return member.id
+        return None
+
     def _sync_schedule(self, db: Session, contribution: Contribution) -> None:
         contribution.schedule = contribution_schedule_repository.list_schedule(db, contribution.id)
         contribution.members = contribution_member_repository.list_members(db, contribution.id)
+        contribution.payouts = contribution_payout_repository.list_for_contribution(db, contribution.id)
+
+    def _recompute_totals(self, db: Session, contribution: Contribution) -> None:
+        active = [m for m in contribution.members if m.status == MemberStatus.ACTIVE]
+        active_member_ids = {m.id for m in active}
+
+        # Sum over ALL members (including LEFT/REMOVED) so financial history is
+        # never lost when someone leaves.
+        contribution.total_contributed = sum(m.total_contributed for m in contribution.members)
+
+        expected = contribution.amount * contribution.member_count * contribution.rounds
+        contribution.total_expected = expected
+        contribution.progress = round(contribution.total_contributed / expected * 100) if expected else 0
+
+        due = [
+            s.due_date
+            for s in contribution.schedule
+            if s.member_id is not None
+            and s.member_id in active_member_ids
+            and s.status != ScheduleStatus.PAID
+        ]
+        contribution.next_payment_date = min(due) if due else None
+
+        if active and not due:
+            contribution.status = ContributionStatus.COMPLETED
+            if contribution.end_date is None:
+                paid = [s.paid_at for s in contribution.schedule if s.paid_at is not None]
+                contribution.end_date = max(paid) if paid else contribution.start_date
+
+        db.flush()
+
+    # ------------------------------------------------------------------ create
 
     def create(self, db: Session, *, user: User, payload) -> ContributionOut:
         if payload.withdrawal_rule is not None and payload.fixed_withdrawal_date:
@@ -87,7 +139,6 @@ class ContributionService:
         else:
             withdrawal_rule = None
 
-        total_expected = payload.amount * payload.rounds
         contribution = contribution_repository.create(
             db,
             created_by=user.id,
@@ -101,7 +152,6 @@ class ContributionService:
             start_date=payload.start_date,
             end_date=payload.end_date,
             withdrawal_date=payload.fixed_withdrawal_date,
-            total_expected=total_expected,
             withdrawal_rule=withdrawal_rule,
             status=ContributionStatus.UPCOMING,
         )
@@ -110,23 +160,15 @@ class ContributionService:
             contribution_schedule_repository.create(
                 db,
                 contribution_id=contribution.id,
+                member_id=None,
                 period=due.strftime("%Y-%m"),
                 label=f"Round {index + 1}",
                 due_date=due,
                 amount=payload.amount,
             )
 
-        contribution_member_repository.create(
-            db,
-            contribution_id=contribution.id,
-            user_id=user.id,
-            display_name=f"{user.first_name} {user.last_name}".strip(),
-            avatar=user.avatar,
-            position=1,
-        )
-
-        contribution.next_payment_date = contribution.schedule[0].due_date if contribution.schedule else None
-        db.flush()
+        self._sync_schedule(db, contribution)
+        self._recompute_totals(db, contribution)
 
         audit_log_repository.create(
             db,
@@ -156,12 +198,18 @@ class ContributionService:
         if contribution is None:
             raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
         self._sync_schedule(db, contribution)
-        return self._build_out(contribution)
+        member_id = self._member_id_for(db, contribution_id, user.id)
+        return self._build_out(contribution, member_id=member_id)
 
     def list_mine(self, db: Session, *, user: User, status=None, page: int = 1, page_size: int = 20):
         items, total = contribution_repository.list_mine(db, user.id, status=status, page=page, page_size=page_size)
+        results = []
+        for item in items:
+            self._sync_schedule(db, item)
+            member_id = self._member_id_for(db, item.id, user.id)
+            results.append(self._build_out(item, member_id=member_id))
         return {
-            "items": [self._build_out(item) for item in items],
+            "items": results,
             "total": total,
             "page": page,
             "page_size": page_size,
@@ -170,6 +218,8 @@ class ContributionService:
 
     def list_open(self, db: Session, *, page: int = 1, page_size: int = 20):
         items, total = contribution_repository.list_open(db, page=page, page_size=page_size)
+        for item in items:
+            self._sync_schedule(db, item)
         return {
             "items": [self._build_out(item) for item in items],
             "total": total,
@@ -180,6 +230,8 @@ class ContributionService:
 
     def list_all(self, db: Session, *, status=None, search: str | None = None, page: int = 1, page_size: int = 20):
         items, total = contribution_repository.list_all(db, status=status, search=search, page=page, page_size=page_size)
+        for item in items:
+            self._sync_schedule(db, item)
         return {
             "items": [self._build_out(item) for item in items],
             "total": total,
@@ -203,14 +255,6 @@ class ContributionService:
     def _apply_update(self, db: Session, contribution: Contribution, payload) -> None:
         data = payload.model_dump(exclude_unset=True)
 
-        # Recompute expected total when amount/rounds change.
-        revalidate = False
-        if "amount" in data or "rounds" in data:
-            contribution.total_expected = (data.get("amount") or contribution.amount) * (
-                data.get("rounds") or contribution.rounds
-            )
-            revalidate = True
-
         if "withdrawal_date" in data:
             withdrawal_date = data.pop("withdrawal_date")
             contribution.withdrawal_date = withdrawal_date
@@ -229,18 +273,13 @@ class ContributionService:
             if value is not None:
                 setattr(contribution, key, value)
 
-        if revalidate:
-            contribution.progress = (
-                round(contribution.total_contributed / contribution.total_expected * 100)
-                if contribution.total_expected
-                else 0
-            )
+        self._sync_schedule(db, contribution)
+        self._recompute_totals(db, contribution)
 
         db.flush()
 
     def update(self, db: Session, *, user: User, contribution_id: uuid.UUID, payload) -> ContributionOut:
         contribution = self._get_owned(db, user=user, contribution_id=contribution_id)
-
         self._apply_update(db, contribution, payload)
 
         audit_log_repository.create(
@@ -321,6 +360,156 @@ class ContributionService:
         db.delete(contribution)
         db.flush()
 
+    # ------------------------------------------------------- member schedules
+
+    def _create_member_schedules(self, db: Session, contribution: Contribution, member: ContributionMember) -> None:
+        dates = self._compute_dates(contribution.start_date, contribution.frequency.value, contribution.rounds)
+        for index, due in enumerate(dates):
+            contribution_schedule_repository.create(
+                db,
+                contribution_id=contribution.id,
+                member_id=member.id,
+                period=due.strftime("%Y-%m"),
+                label=f"Round {index + 1}",
+                due_date=due,
+                amount=contribution.amount,
+            )
+
+        member_schedules = contribution_schedule_repository.list_for_member(db, contribution.id, member.id)
+        if member_schedules:
+            contribution_member_repository.set_next_payment_date(db, member, member_schedules[0].due_date)
+
+        rule = contribution.withdrawal_rule or {}
+        existing_payouts = contribution_payout_repository.list_for_member(db, contribution.id, member.id)
+        if existing_payouts:
+            return
+
+        if rule.get("type") == "fixed_date":
+            target_date = contribution.withdrawal_date or (
+                dates[-1] if dates else contribution.start_date
+            )
+            contribution_payout_repository.create(
+                db,
+                contribution_id=contribution.id,
+                member_id=member.id,
+                round_number=contribution.rounds if contribution.rounds else 1,
+                scheduled_date=target_date,
+                amount=contribution.amount * contribution.member_count,
+            )
+        else:
+            step = timedelta(days=FREQUENCY_DAYS.get(contribution.frequency.value, 30))
+            round_number = member.payout_position or member.position
+            scheduled_date = contribution.start_date + step * (round_number - 1)
+            contribution_payout_repository.create(
+                db,
+                contribution_id=contribution.id,
+                member_id=member.id,
+                round_number=round_number,
+                scheduled_date=scheduled_date,
+                amount=contribution.amount * contribution.member_count,
+            )
+
+    # ------------------------------------------------------------- membership
+
+    def _join_member(self, db: Session, *, user: User, contribution_id: uuid.UUID) -> ContributionOut:
+        contribution = contribution_repository.get(db, contribution_id)
+        if contribution is None:
+            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+        if not contribution.is_open or contribution.status not in (ContributionStatus.UPCOMING, ContributionStatus.ACTIVE):
+            raise AppException(
+                message="This contribution is not open for joining.",
+                status_code=400,
+                error_code="NOT_ACCEPTING_MEMBERS",
+            )
+
+        active_count = contribution_member_repository.count_active(db, contribution_id)
+        next_position = active_count + 1
+        if next_position > contribution.member_count:
+            raise AppException(message="This contribution is full.", status_code=400, error_code="CONTRIBUTION_FULL")
+
+        existing = contribution_member_repository.get(db, contribution_id, user.id)
+        if existing is not None:
+            if existing.status == MemberStatus.ACTIVE:
+                raise AppException(message="You have already joined this contribution.", status_code=400, error_code="ALREADY_MEMBER")
+            # Rejoining is allowed — restore the historical membership.
+            existing.status = MemberStatus.ACTIVE
+            existing.position = next_position
+            existing.payout_position = next_position
+            existing.display_name = f"{user.first_name} {user.last_name}".strip()
+            existing.avatar = user.avatar
+            joining_action = "Rejoined"
+            member = existing
+        else:
+            member = contribution_member_repository.create(
+                db,
+                contribution_id=contribution_id,
+                user_id=user.id,
+                display_name=f"{user.first_name} {user.last_name}".strip(),
+                avatar=user.avatar,
+                position=next_position,
+                payout_position=next_position,
+            )
+            joining_action = "Joined"
+
+        if not contribution_schedule_repository.list_for_member(db, contribution_id, member.id):
+            self._create_member_schedules(db, contribution, member)
+
+        audit_log_repository.create(
+            db,
+            actor_id=user.id,
+            actor_name=f"{user.first_name} {user.last_name}",
+            actor_email=user.email,
+            actor_role=user.role,
+            action=AuditAction.CREATE,
+            category=AuditCategory.CONTRIBUTION,
+            description=f"{joining_action} contribution '{contribution.name}' at position {next_position}.",
+            target=contribution.name,
+            target_id=contribution.id,
+        )
+
+        self._sync_schedule(db, contribution)
+        self._recompute_totals(db, contribution)
+        member_id = self._member_id_for(db, contribution_id, user.id)
+        return self._build_out(contribution, member_id=member_id)
+
+    def join(self, db: Session, *, user: User, contribution_id: uuid.UUID) -> ContributionOut:
+        result = self._join_member(db, user=user, contribution_id=contribution_id)
+        notification_service.create(
+            db,
+            user_id=user.id,
+            title="Contribution joined",
+            message="You have joined the contribution. Your first payment due date has been scheduled.",
+            type_=NotificationType.CONTRIBUTION,
+        )
+        return result
+
+    def leave(self, db: Session, *, user: User, contribution_id: uuid.UUID) -> None:
+        contribution = contribution_repository.get(db, contribution_id)
+        if contribution is None:
+            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+
+        member = contribution_member_repository.get(db, contribution_id, user.id)
+        if member is None or member.status == MemberStatus.LEFT:
+            raise AppException(message="You are not a member of this contribution.", status_code=400, error_code="NOT_MEMBER")
+
+        contribution_member_repository.set_status(db, member, MemberStatus.LEFT)
+
+        audit_log_repository.create(
+            db,
+            actor_id=user.id,
+            actor_name=f"{user.first_name} {user.last_name}",
+            actor_email=user.email,
+            actor_role=user.role,
+            action=AuditAction.DELETE,
+            category=AuditCategory.CONTRIBUTION,
+            description=f"Left contribution '{contribution.name}'. History preserved.",
+            target=contribution.name,
+            target_id=contribution.id,
+        )
+
+        self._sync_schedule(db, contribution)
+        self._recompute_totals(db, contribution)
+
     def admin_add_member(self, db: Session, *, actor: User, contribution_id: uuid.UUID, user_id: uuid.UUID) -> ContributionOut:
         contribution = contribution_repository.get(db, contribution_id)
         if contribution is None:
@@ -331,26 +520,37 @@ class ContributionService:
             raise AppException(message="User not found.", status_code=404, error_code="USER_NOT_FOUND")
 
         existing = contribution_member_repository.get(db, contribution_id, user_id)
-        if existing is not None:
+        active_count = contribution_member_repository.count_active(db, contribution_id)
+        next_position = active_count + 1
+        if existing is not None and existing.status == MemberStatus.ACTIVE:
             raise AppException(
                 message="This user is already a member of the contribution.",
                 status_code=400,
                 error_code="ALREADY_MEMBER",
             )
-
-        current = contribution_member_repository.count_members(db, contribution_id)
-        next_position = current + 1
         if next_position > contribution.member_count:
             raise AppException(message="This contribution is full.", status_code=400, error_code="CONTRIBUTION_FULL")
 
-        contribution_member_repository.create(
-            db,
-            contribution_id=contribution_id,
-            user_id=user_id,
-            display_name=f"{member_user.first_name} {member_user.last_name}".strip(),
-            avatar=member_user.avatar,
-            position=next_position,
-        )
+        if existing is not None:
+            existing.status = MemberStatus.ACTIVE
+            existing.position = next_position
+            existing.payout_position = next_position
+            existing.display_name = f"{member_user.first_name} {member_user.last_name}".strip()
+            existing.avatar = member_user.avatar
+            member = existing
+        else:
+            member = contribution_member_repository.create(
+                db,
+                contribution_id=contribution_id,
+                user_id=user_id,
+                display_name=f"{member_user.first_name} {member_user.last_name}".strip(),
+                avatar=member_user.avatar,
+                position=next_position,
+                payout_position=next_position,
+            )
+
+        if not contribution_schedule_repository.list_for_member(db, contribution_id, member.id):
+            self._create_member_schedules(db, contribution, member)
 
         audit_log_repository.create(
             db,
@@ -365,8 +565,8 @@ class ContributionService:
             target_id=contribution.id,
         )
 
-        db.flush()
         self._sync_schedule(db, contribution)
+        self._recompute_totals(db, contribution)
         return self._build_out(contribution)
 
     def admin_remove_member(self, db: Session, *, actor: User, contribution_id: uuid.UUID, user_id: uuid.UUID) -> ContributionOut:
@@ -389,7 +589,7 @@ class ContributionService:
                 error_code="CANNOT_REMOVE_CREATOR",
             )
 
-        contribution_member_repository.delete(db, member)
+        contribution_member_repository.set_status(db, member, MemberStatus.REMOVED)
 
         audit_log_repository.create(
             db,
@@ -399,174 +599,216 @@ class ContributionService:
             actor_role=actor.role,
             action=AuditAction.DELETE,
             category=AuditCategory.CONTRIBUTION,
-            description=f"Admin removed {member.display_name} from '{contribution.name}'.",
-            target=contribution.name,
-            target_id=contribution.id,
-        )
-
-        db.flush()
-        self._sync_schedule(db, contribution)
-        return self._build_out(contribution)
-
-    def join(self, db: Session, *, user: User, contribution_id: uuid.UUID) -> ContributionOut:
-        contribution = contribution_repository.get(db, contribution_id)
-        if contribution is None:
-            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
-        if not contribution.is_open or contribution.status not in (ContributionStatus.UPCOMING, ContributionStatus.ACTIVE):
-            raise AppException(
-                message="This contribution is not open for joining.",
-                status_code=400,
-                error_code="NOT_ACCEPTING_MEMBERS",
-            )
-
-        existing = contribution_member_repository.get(db, contribution_id, user.id)
-        if existing is not None:
-            raise AppException(message="You have already joined this contribution.", status_code=400, error_code="ALREADY_MEMBER")
-
-        current = contribution_member_repository.count_members(db, contribution_id)
-        next_position = current + 1
-        if next_position > contribution.member_count:
-            raise AppException(message="This contribution is full.", status_code=400, error_code="CONTRIBUTION_FULL")
-
-        contribution_member_repository.create(
-            db,
-            contribution_id=contribution_id,
-            user_id=user.id,
-            display_name=f"{user.first_name} {user.last_name}".strip(),
-            avatar=user.avatar,
-            position=next_position,
-        )
-
-        audit_log_repository.create(
-            db,
-            actor_id=user.id,
-            actor_name=f"{user.first_name} {user.last_name}",
-            actor_email=user.email,
-            actor_role=user.role,
-            action=AuditAction.CREATE,
-            category=AuditCategory.CONTRIBUTION,
-            description=f"Joined contribution '{contribution.name}' at position {next_position}.",
+            description=f"Admin removed {member.display_name} from '{contribution.name}'. History preserved.",
             target=contribution.name,
             target_id=contribution.id,
         )
 
         self._sync_schedule(db, contribution)
+        self._recompute_totals(db, contribution)
         return self._build_out(contribution)
 
-    def leave(self, db: Session, *, user: User, contribution_id: uuid.UUID) -> None:
-        contribution = contribution_repository.get(db, contribution_id)
-        if contribution is None:
-            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+    # ------------------------------------------------------------- payments
 
-        if contribution.created_by == user.id:
-            # Creator leaves -> deletes the contribution.
-            name = contribution.name
-            audit_log_repository.create(
+    def _attempt_payment(
+        self,
+        db: Session,
+        contribution: Contribution,
+        member: ContributionMember,
+        schedule,
+        *,
+        persist_failure: bool = False,
+    ) -> bool:
+        """Debit wallet + mark schedule paid + update totals. Atomic per request.
+
+        Returns True on success. Records an INSUFFICIENT_FUNDS failure and
+        returns False when the wallet is too low; schedule stays PENDING. When
+        `persist_failure` is set, the failure record is committed so it survives
+        the request being rolled back (the endpoint returns 400).
+        """
+        try:
+            transaction = wallet_service.debit(
                 db,
-                actor_id=user.id,
-                actor_name=f"{user.first_name} {user.last_name}",
-                actor_email=user.email,
-                actor_role=user.role,
-                action=AuditAction.DELETE,
-                category=AuditCategory.CONTRIBUTION,
-                description=f"Deleted contribution '{name}'.",
-                target=name,
-                target_id=contribution.id,
+                user_id=member.user_id,
+                amount=schedule.amount,
+                description=f"{contribution.name} — {schedule.label}",
+                reference=make_reference("CON"),
+                type_=TransactionType.CONTRIBUTION,
+                details={
+                    "contribution_id": str(contribution.id),
+                    "schedule_id": schedule.id,
+                    "member_id": str(member.id),
+                    "method": member.funding_method.value,
+                },
             )
-            db.delete(contribution)
-            db.flush()
-            return
+        except AppException as exc:
+            if exc.error_code == "INSUFFICIENT_FUNDS":
+                contribution_schedule_repository.record_failure(db, schedule, "insufficient_funds")
+                if persist_failure:
+                    db.commit()
+                return False
+            raise
 
-        member = contribution_member_repository.get(db, contribution_id, user.id)
-        if member is None:
-            raise AppException(message="You are not a member of this contribution.", status_code=400, error_code="NOT_MEMBER")
-
-        name = contribution.name
-        contribution_member_repository.delete(db, member)
-
-        audit_log_repository.create(
-            db,
-            actor_id=user.id,
-            actor_name=f"{user.first_name} {user.last_name}",
-            actor_email=user.email,
-            actor_role=user.role,
-            action=AuditAction.DELETE,
-            category=AuditCategory.CONTRIBUTION,
-            description=f"Left contribution '{name}'.",
-            target=name,
-            target_id=contribution.id,
+        contribution_schedule_repository.mark_paid(
+            db, schedule, transaction_id=transaction.id, paid_at=_utcnow()
         )
-
-    def pay(self, db: Session, *, user: User, contribution_id: uuid.UUID, schedule_id: int | None) -> ContributionOut:
-        contribution = contribution_repository.get(db, contribution_id)
-        if contribution is None:
-            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
-
-        member = contribution_member_repository.get(db, contribution_id, user.id)
-        if member is None:
-            raise AppException(message="You are not a member of this contribution.", status_code=403, error_code="NOT_MEMBER")
-
-        schedule = (
-            contribution_schedule_repository.get(db, schedule_id)
-            if schedule_id
-            else contribution_schedule_repository.next_pending(db, contribution_id)
-        )
-        if schedule is None or schedule.contribution_id != contribution_id or schedule.status == ScheduleStatus.PAID:
-            raise AppException(message="No upcoming payment due for this contribution.", status_code=400, error_code="NO_DUE_PAYMENT")
-
-        contribution_schedule_repository.mark_paid(db, schedule)
-
-        transaction_repository.create(
-            db,
-            user_id=user.id,
-            type_=TransactionType.CONTRIBUTION,
-            status=TransactionStatus.SUCCESSFUL,
-            amount=schedule.amount,
-            description=f"{contribution.name} — {schedule.label}",
-            reference=_make_reference(),
-            details={"contribution_id": str(contribution.id), "schedule_id": schedule.id},
-        )
-
-        member.total_contributed += schedule.amount
-        contribution.total_contributed += schedule.amount
+        contribution_member_repository.add_contribution(db, member, schedule.amount)
         contribution.last_payment_date = schedule.due_date
 
-        remaining = contribution_schedule_repository.list_schedule(db, contribution_id)
-        pending = [s for s in remaining if s.status == ScheduleStatus.UPCOMING]
-        contribution.next_payment_date = pending[0].due_date if pending else None
+        self._sync_schedule(db, contribution)
+        self._recompute_totals(db, contribution)
 
-        if contribution.total_expected:
-            contribution.progress = round(contribution.total_contributed / contribution.total_expected * 100)
+        pending = [
+            s
+            for s in contribution.schedule
+            if s.member_id is not None and s.status != ScheduleStatus.PAID
+        ]
+        member_next = [
+            s
+            for s in contribution.schedule
+            if s.member_id == member.id and s.status != ScheduleStatus.PAID
+        ]
+        contribution_member_repository.set_next_payment_date(
+            db, member, member_next[0].due_date if member_next else None
+        )
         if not pending:
             contribution.status = ContributionStatus.COMPLETED
             contribution.end_date = schedule.due_date
 
-        db.flush()
-
+        owner = member.user
         audit_log_repository.create(
             db,
-            actor_id=user.id,
-            actor_name=f"{user.first_name} {user.last_name}",
-            actor_email=user.email,
-            actor_role=user.role,
+            actor_id=member.user_id,
+            actor_name=member.display_name,
+            actor_email=owner.email if owner else "",
+            actor_role=owner.role if owner else None,
             action=AuditAction.CREATE,
             category=AuditCategory.CONTRIBUTION,
             description=f"Paid {schedule.amount} for '{contribution.name}' ({schedule.label}).",
             target=contribution.name,
             target_id=contribution.id,
-            details={"schedule_id": schedule.id},
+            details={"schedule_id": schedule.id, "transaction_id": str(transaction.id)},
         )
 
         notification_service.create(
             db,
-            user_id=user.id,
+            user_id=member.user_id,
             title="Payment recorded",
-            message=f"You paid {schedule.amount} for '{contribution.name}' ({schedule.label}).",
+            message=f"You paid {schedule.amount} for '{contribution.name}' ({schedule.label}) from your wallet.",
             type_=NotificationType.CONTRIBUTION,
         )
+        return True
 
-        self._sync_schedule(db, contribution)
-        return self._build_out(contribution)
+    def pay(
+        self,
+        db: Session,
+        *,
+        user: User,
+        contribution_id: uuid.UUID,
+        schedule_id: int | None = None,
+        funding_method: FundingMethod = FundingMethod.WALLET,
+    ) -> ContributionOut:
+        contribution = contribution_repository.get(db, contribution_id)
+        if contribution is None:
+            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+
+        member = contribution_member_repository.get(db, contribution_id, user.id)
+        if member is None or member.status != MemberStatus.ACTIVE:
+            raise AppException(message="You are not an active member of this contribution.", status_code=403, error_code="NOT_MEMBER")
+
+        if funding_method != FundingMethod.WALLET:
+            raise AppException(
+                message="Card and bank transfer funding are not available yet. Use your wallet.",
+                status_code=400,
+                error_code="FUNDING_METHOD_UNAVAILABLE",
+            )
+
+        if schedule_id is not None:
+            schedule = contribution_schedule_repository.get_locked(db, schedule_id)
+            if (
+                schedule is None
+                or schedule.contribution_id != contribution_id
+                or schedule.member_id != member.id
+            ):
+                raise AppException(
+                    message="No upcoming payment due for this contribution.",
+                    status_code=400,
+                    error_code="NO_DUE_PAYMENT",
+                )
+        else:
+            schedule = contribution_schedule_repository.next_due_for_member(db, contribution_id, member.id)
+            if schedule is None:
+                raise AppException(
+                    message="No upcoming payment due for this contribution.",
+                    status_code=400,
+                    error_code="NO_DUE_PAYMENT",
+                )
+
+        if schedule.status == ScheduleStatus.PAID:
+            raise AppException(
+                message="This payment has already been made.",
+                status_code=400,
+                error_code="ALREADY_PAID",
+            )
+
+        paid = self._attempt_payment(db, contribution, member, schedule, persist_failure=True)
+        if not paid:
+            raise AppException(
+                message="Insufficient wallet balance to cover this contribution.",
+                status_code=400,
+                error_code="INSUFFICIENT_FUNDS",
+            )
+
+        return self._build_out(contribution, member_id=member.id)
+
+    def run_automatic_contributions(self, db: Session, *, contribution_id: uuid.UUID | None = None) -> dict:
+        """Attempt to collect pending due contributions via automatic wallet funding.
+
+        Safe to run from a scheduler. Payments short on funds are recorded on the
+        schedule (failure_reason=insufficient_funds) and left PENDING/retryable.
+        """
+        now = _utcnow()
+
+        if contribution_id is not None:
+            contribution = contribution_repository.get(db, contribution_id)
+            ids = [contribution.id] if contribution is not None else []
+        else:
+            contribution_rows = db.execute(select(Contribution.id)).scalars().all()
+            ids = list(contribution_rows)
+
+        total_processed = 0
+        total_paid = 0
+        total_failed = 0
+        for cid in ids:
+            contribution = contribution_repository.get(db, cid)
+            if contribution is None or contribution.status not in (
+                ContributionStatus.ACTIVE,
+                ContributionStatus.UPCOMING,
+            ):
+                continue
+            self._sync_schedule(db, contribution)
+            members = contribution_member_repository.list_auto_wallet(db, cid)
+            for member in members:
+                due = [
+                    s
+                    for s in contribution.schedule
+                    if s.member_id == member.id
+                    and s.status != ScheduleStatus.PAID
+                    and (s.due_date if s.due_date.tzinfo else s.due_date.replace(tzinfo=timezone.utc)) <= now
+                ]
+                for schedule in due[:1]:
+                    total_processed += 1
+                    ok = self._attempt_payment(db, contribution, member, schedule)
+                    if ok:
+                        total_paid += 1
+                    else:
+                        total_failed += 1
+
+        return {
+            "processed": total_processed,
+            "paid": total_paid,
+            "insufficient_funds": total_failed,
+        }
 
 
 contribution_service = ContributionService()

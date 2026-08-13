@@ -3,9 +3,9 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import get_current_user
+from app.api.dependencies.auth import get_current_admin, get_current_user
 from app.core.database import get_db
-from app.models.enums import ContributionStatus
+from app.models.enums import ContributionStatus, FundingMethod
 from app.models.user import User
 from app.schemas.contribution import (
     ContributionCreate,
@@ -20,7 +20,12 @@ router = APIRouter(tags=["Contributions"])
 
 
 @router.post("", response_model=SuccessResponse[ContributionOut])
-def create_contribution(payload: ContributionCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_contribution(
+    payload: ContributionCreate,
+    user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    # Only admins create contribution plans. Users can only join.
     result = contribution_service.create(db, user=user, payload=payload)
     return SuccessResponse(message="Contribution created.", data=result)
 
@@ -60,6 +65,23 @@ def leave_contribution(contribution_id: uuid.UUID, user: User = Depends(get_curr
     return MessageResponse(message="Left contribution.")
 
 
+@router.post("/schedules/{schedule_id}/pay", response_model=SuccessResponse[ContributionOut])
+def pay_schedule(
+    schedule_id: int,
+    contribution_id: uuid.UUID = Query(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    result = contribution_service.pay(
+        db,
+        user=user,
+        contribution_id=contribution_id,
+        schedule_id=schedule_id,
+        funding_method=FundingMethod.WALLET,
+    )
+    return SuccessResponse(message="Payment recorded.", data=result)
+
+
 @router.post("/{contribution_id}/pay", response_model=SuccessResponse[ContributionOut])
 def pay_contribution(
     contribution_id: uuid.UUID,
@@ -67,8 +89,15 @@ def pay_contribution(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    funding_method = payload.funding_method if payload else FundingMethod.WALLET
     schedule_id = payload.schedule_id if payload else None
-    result = contribution_service.pay(db, user=user, contribution_id=contribution_id, schedule_id=schedule_id)
+    result = contribution_service.pay(
+        db,
+        user=user,
+        contribution_id=contribution_id,
+        schedule_id=schedule_id,
+        funding_method=funding_method,
+    )
     return SuccessResponse(message="Payment recorded.", data=result)
 
 
@@ -82,7 +111,7 @@ def get_contribution(contribution_id: uuid.UUID, user: User = Depends(get_curren
 def update_contribution(
     contribution_id: uuid.UUID,
     payload: ContributionUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
     result = contribution_service.update(db, user=user, contribution_id=contribution_id, payload=payload)
@@ -90,6 +119,6 @@ def update_contribution(
 
 
 @router.delete("/{contribution_id}", response_model=MessageResponse)
-def delete_contribution(contribution_id: uuid.UUID, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_contribution(contribution_id: uuid.UUID, user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
     contribution_service.delete(db, user=user, contribution_id=contribution_id)
     return MessageResponse(message="Contribution deleted.")

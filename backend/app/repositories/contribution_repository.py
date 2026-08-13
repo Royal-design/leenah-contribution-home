@@ -6,8 +6,15 @@ from sqlalchemy.orm import Session
 
 from app.models.contribution import Contribution
 from app.models.contribution_member import ContributionMember
+from app.models.contribution_payout import ContributionPayout
 from app.models.contribution_schedule import ContributionSchedule
-from app.models.enums import ContributionStatus, ScheduleStatus
+from app.models.enums import (
+    ContributionStatus,
+    FundingMethod,
+    MemberStatus,
+    PayoutStatus,
+    ScheduleStatus,
+)
 
 
 class ContributionRepository:
@@ -108,22 +115,67 @@ class ContributionMemberRepository:
             )
         ).scalar_one_or_none()
 
+    def get_by_id(self, db: Session, member_id: uuid.UUID) -> ContributionMember | None:
+        return db.get(ContributionMember, member_id)
+
     def count_members(self, db: Session, contribution_id: uuid.UUID) -> int:
         return db.execute(
             select(func.count(ContributionMember.id)).where(ContributionMember.contribution_id == contribution_id)
         ).scalar_one()
 
-    def create(self, db: Session, *, contribution_id: uuid.UUID, user_id: uuid.UUID, display_name: str, avatar: str | None, position: int) -> ContributionMember:
+    def count_active(self, db: Session, contribution_id: uuid.UUID) -> int:
+        return db.execute(
+            select(func.count(ContributionMember.id)).where(
+                ContributionMember.contribution_id == contribution_id,
+                ContributionMember.status == MemberStatus.ACTIVE,
+            )
+        ).scalar_one()
+
+    def create(
+        self,
+        db: Session,
+        *,
+        contribution_id: uuid.UUID,
+        user_id: uuid.UUID,
+        display_name: str,
+        avatar: str | None,
+        position: int,
+        payout_position: int | None = None,
+        funding_method: FundingMethod = FundingMethod.WALLET,
+        automatic: bool = True,
+    ) -> ContributionMember:
         member = ContributionMember(
             contribution_id=contribution_id,
             user_id=user_id,
             display_name=display_name,
             avatar=avatar,
             position=position,
+            payout_position=payout_position or position,
+            funding_method=funding_method,
+            automatic=automatic,
         )
         db.add(member)
         db.flush()
         return member
+
+    def set_status(self, db: Session, member: ContributionMember, status: MemberStatus) -> None:
+        member.status = status
+        if status != MemberStatus.ACTIVE:
+            member.next_payment_date = None
+        db.flush()
+
+    def set_funding(self, db: Session, member: ContributionMember, *, funding_method: FundingMethod, automatic: bool) -> None:
+        member.funding_method = funding_method
+        member.automatic = automatic
+        db.flush()
+
+    def set_next_payment_date(self, db: Session, member: ContributionMember, value: datetime | None) -> None:
+        member.next_payment_date = value
+        db.flush()
+
+    def add_contribution(self, db: Session, member: ContributionMember, amount: int) -> None:
+        member.total_contributed += amount
+        db.flush()
 
     def delete(self, db: Session, member: ContributionMember) -> None:
         db.delete(member)
@@ -136,11 +188,48 @@ class ContributionMemberRepository:
             ).scalars().all()
         )
 
+    def list_active(self, db: Session, contribution_id: uuid.UUID) -> list[ContributionMember]:
+        return list(
+            db.execute(
+                select(ContributionMember)
+                .where(
+                    ContributionMember.contribution_id == contribution_id,
+                    ContributionMember.status == MemberStatus.ACTIVE,
+                )
+                .order_by(ContributionMember.position)
+            ).scalars().all()
+        )
+
+    def list_auto_wallet(self, db: Session, contribution_id: uuid.UUID) -> list[ContributionMember]:
+        return list(
+            db.execute(
+                select(ContributionMember)
+                .where(
+                    ContributionMember.contribution_id == contribution_id,
+                    ContributionMember.status == MemberStatus.ACTIVE,
+                    ContributionMember.automatic.is_(True),
+                    ContributionMember.funding_method == FundingMethod.WALLET,
+                )
+                .order_by(ContributionMember.position)
+            ).scalars().all()
+        )
+
 
 class ContributionScheduleRepository:
-    def create(self, db: Session, *, contribution_id: uuid.UUID, period: str, label: str | None, due_date: datetime, amount: int) -> ContributionSchedule:
+    def create(
+        self,
+        db: Session,
+        *,
+        contribution_id: uuid.UUID,
+        member_id: uuid.UUID | None,
+        period: str,
+        label: str | None,
+        due_date: datetime,
+        amount: int,
+    ) -> ContributionSchedule:
         schedule = ContributionSchedule(
             contribution_id=contribution_id,
+            member_id=member_id,
             period=period,
             label=label,
             due_date=due_date,
@@ -153,6 +242,11 @@ class ContributionScheduleRepository:
     def get(self, db: Session, schedule_id: int) -> ContributionSchedule | None:
         return db.get(ContributionSchedule, schedule_id)
 
+    def get_locked(self, db: Session, schedule_id: int) -> ContributionSchedule | None:
+        return db.execute(
+            select(ContributionSchedule).where(ContributionSchedule.id == schedule_id).with_for_update()
+        ).scalar_one_or_none()
+
     def list_schedule(self, db: Session, contribution_id: uuid.UUID) -> list[ContributionSchedule]:
         return list(
             db.execute(
@@ -160,19 +254,117 @@ class ContributionScheduleRepository:
             ).scalars().all()
         )
 
-    def next_pending(self, db: Session, contribution_id: uuid.UUID) -> ContributionSchedule | None:
+    def list_for_member(self, db: Session, contribution_id: uuid.UUID, member_id: uuid.UUID) -> list[ContributionSchedule]:
+        return list(
+            db.execute(
+                select(ContributionSchedule)
+                .where(
+                    ContributionSchedule.contribution_id == contribution_id,
+                    ContributionSchedule.member_id == member_id,
+                )
+                .order_by(ContributionSchedule.due_date)
+            ).scalars().all()
+        )
+
+    def next_due_for_member(self, db: Session, contribution_id: uuid.UUID, member_id: uuid.UUID) -> ContributionSchedule | None:
         return db.execute(
             select(ContributionSchedule)
-            .where(ContributionSchedule.contribution_id == contribution_id)
+            .where(
+                ContributionSchedule.contribution_id == contribution_id,
+                ContributionSchedule.member_id == member_id,
+                ContributionSchedule.status != ScheduleStatus.PAID,
+            )
             .order_by(ContributionSchedule.due_date)
+            .with_for_update()
             .limit(1)
         ).scalar_one_or_none()
 
-    def mark_paid(self, db: Session, schedule: ContributionSchedule) -> None:
+    def list_pending_for_member(self, db: Session, contribution_id: uuid.UUID, member_id: uuid.UUID) -> list[ContributionSchedule]:
+        return list(
+            db.execute(
+                select(ContributionSchedule)
+                .where(
+                    ContributionSchedule.contribution_id == contribution_id,
+                    ContributionSchedule.member_id == member_id,
+                    ContributionSchedule.status != ScheduleStatus.PAID,
+                )
+                .order_by(ContributionSchedule.due_date)
+            ).scalars().all()
+        )
+
+    def list_due(self, db: Session, contribution_id: uuid.UUID, cutoff: datetime) -> list[ContributionSchedule]:
+        return list(
+            db.execute(
+                select(ContributionSchedule)
+                .where(
+                    ContributionSchedule.contribution_id == contribution_id,
+                    ContributionSchedule.member_id.is_not(None),
+                    ContributionSchedule.status != ScheduleStatus.PAID,
+                    ContributionSchedule.due_date <= cutoff,
+                )
+                .order_by(ContributionSchedule.due_date)
+            ).scalars().all()
+        )
+
+    def mark_paid(self, db: Session, schedule: ContributionSchedule, *, transaction_id: uuid.UUID, paid_at: datetime) -> None:
         schedule.status = ScheduleStatus.PAID
+        schedule.transaction_id = transaction_id
+        schedule.paid_at = paid_at
+        schedule.attempt_count += 1
+        schedule.failure_reason = None
         db.flush()
+
+    def record_failure(self, db: Session, schedule: ContributionSchedule, reason: str) -> None:
+        schedule.attempt_count += 1
+        schedule.failure_reason = reason
+        db.flush()
+
+
+class ContributionPayoutRepository:
+    def create(
+        self,
+        db: Session,
+        *,
+        contribution_id: uuid.UUID,
+        member_id: uuid.UUID,
+        round_number: int,
+        scheduled_date: datetime,
+        amount: int,
+    ) -> ContributionPayout:
+        payout = ContributionPayout(
+            contribution_id=contribution_id,
+            member_id=member_id,
+            round_number=round_number,
+            scheduled_date=scheduled_date,
+            amount=amount,
+        )
+        db.add(payout)
+        db.flush()
+        return payout
+
+    def list_for_contribution(self, db: Session, contribution_id: uuid.UUID) -> list[ContributionPayout]:
+        return list(
+            db.execute(
+                select(ContributionPayout)
+                .where(ContributionPayout.contribution_id == contribution_id)
+                .order_by(ContributionPayout.round_number)
+            ).scalars().all()
+        )
+
+    def list_for_member(self, db: Session, contribution_id: uuid.UUID, member_id: uuid.UUID) -> list[ContributionPayout]:
+        return list(
+            db.execute(
+                select(ContributionPayout)
+                .where(
+                    ContributionPayout.contribution_id == contribution_id,
+                    ContributionPayout.member_id == member_id,
+                )
+                .order_by(ContributionPayout.round_number)
+            ).scalars().all()
+        )
 
 
 contribution_repository = ContributionRepository()
 contribution_member_repository = ContributionMemberRepository()
 contribution_schedule_repository = ContributionScheduleRepository()
+contribution_payout_repository = ContributionPayoutRepository()

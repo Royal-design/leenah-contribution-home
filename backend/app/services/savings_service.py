@@ -3,20 +3,14 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
-from app.models.enums import AuditAction, AuditCategory, TransactionStatus, TransactionType
+from app.models.enums import AuditAction, AuditCategory
 from app.models.savings_account import SavingsAccount
 from app.models.savings_goal import SavingsGoal
 from app.models.user import User
 from app.repositories.audit_log_repository import audit_log_repository
 from app.repositories.savings_repository import savings_account_repository, savings_goal_repository
-from app.repositories.transaction_repository import transaction_repository
 from app.schemas.savings import SavingsAccountDetail, SavingsGoalOut
-
-
-def _make_reference() -> str:
-    from datetime import datetime
-
-    return f"TXN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
+from app.services.wallet_service import wallet_service
 
 
 class SavingsService:
@@ -34,18 +28,12 @@ class SavingsService:
         return data
 
     def fund(self, db: Session, *, user: User, amount: int, note: str | None, ip_address: str | None = None) -> SavingsAccountDetail:
-        account = self._get_account(db, user)
-        savings_account_repository.credit(db, account, amount)
-
-        transaction = transaction_repository.create(
+        transaction = wallet_service.credit(
             db,
             user_id=user.id,
-            type_=TransactionType.FUNDING,
-            status=TransactionStatus.SUCCESSFUL,
             amount=amount,
             description=note or "Savings top-up",
-            reference=_make_reference(),
-            details={"method": "wallet"},
+            details={"method": "wallet", "channel": "savings"},
         )
 
         audit_log_repository.create(

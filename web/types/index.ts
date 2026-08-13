@@ -36,6 +36,7 @@ export interface ContributionMember {
 }
 
 export interface ContributionScheduleEntry {
+  id: number
   period: string
   label: string
   dueDate: string

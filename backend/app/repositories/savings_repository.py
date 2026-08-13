@@ -22,9 +22,10 @@ class SavingsAccountRepository:
         account.total_saved += amount
         db.flush()
 
-    def debit(self, db: Session, account: SavingsAccount, amount: int) -> None:
+    def debit(self, db: Session, account: SavingsAccount, amount: int, *, track_withdrawal: bool = True) -> None:
         account.balance -= amount
-        account.total_withdrawn += amount
+        if track_withdrawal:
+            account.total_withdrawn += amount
         db.flush()
 
 

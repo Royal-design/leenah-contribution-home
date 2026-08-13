@@ -83,8 +83,8 @@ export function useLeaveContribution() {
 export function useFundContribution() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, amount }: { id: string; amount: number }) =>
-      apiFundContribution(id, amount),
+    mutationFn: ({ id, amount, scheduleId }: { id: string; amount?: number; scheduleId?: number }) =>
+      apiFundContribution(id, { amount, scheduleId }),
     onSuccess: () => {
       toast.success("Contribution funded successfully.")
       queryClient.invalidateQueries({ queryKey: queryKeys.contributions.all })

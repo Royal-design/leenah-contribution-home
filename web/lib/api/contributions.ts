@@ -91,9 +91,13 @@ export async function apiLeaveContribution(id: string): Promise<void> {
   await api.post(`/api/contributions/${id}/leave`)
 }
 
-export async function apiFundContribution(id: string, amount?: number): Promise<Contribution> {
+export async function apiFundContribution(
+  id: string,
+  opts: { amount?: number; scheduleId?: number } = {}
+): Promise<Contribution> {
   const { data } = await api.post<RawContribution>(`/api/contributions/${id}/pay`, {
-    amount,
+    amount: opts.amount,
+    schedule_id: opts.scheduleId,
   })
   return mapContribution(data)
 }

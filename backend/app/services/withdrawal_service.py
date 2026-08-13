@@ -22,6 +22,7 @@ from app.repositories.transaction_repository import transaction_repository
 from app.repositories.withdrawal_repository import withdrawal_repository
 from app.schemas.withdrawal import WithdrawalOut
 from app.services.notification_service import notification_service
+from app.services.wallet_service import wallet_service
 
 
 def _make_reference() -> str:
@@ -184,20 +185,27 @@ class WithdrawalService:
         withdrawal.reviewed_at = datetime.now(timezone.utc)
 
         if status == "approved":
-            transaction_repository.create(
-                db,
-                user_id=withdrawal.user_id,
-                type_=TransactionType.WITHDRAWAL,
-                status=TransactionStatus.SUCCESSFUL,
-                amount=withdrawal.amount,
-                description=f"{withdrawal.withdrawal_type.title()} withdrawal to {withdrawal.destination}",
-                reference=_make_reference(),
-                details={"withdrawal_id": str(withdrawal.id), "bank": withdrawal.bank_name},
-            )
             if withdrawal.withdrawal_type == "savings":
-                account = savings_account_repository.get_for_user(db, withdrawal.user_id)
-                if account:
-                    savings_account_repository.debit(db, account, withdrawal.amount)
+                wallet_service.debit(
+                    db,
+                    user_id=withdrawal.user_id,
+                    amount=withdrawal.amount,
+                    description=f"{withdrawal.withdrawal_type.title()} withdrawal to {withdrawal.destination}",
+                    type_=TransactionType.WITHDRAWAL,
+                    details={"withdrawal_id": str(withdrawal.id), "bank": withdrawal.bank_name},
+                    track_withdrawal=True,
+                )
+            else:
+                transaction_repository.create(
+                    db,
+                    user_id=withdrawal.user_id,
+                    type_=TransactionType.WITHDRAWAL,
+                    status=TransactionStatus.SUCCESSFUL,
+                    amount=withdrawal.amount,
+                    description=f"{withdrawal.withdrawal_type.title()} withdrawal to {withdrawal.destination}",
+                    reference=_make_reference(),
+                    details={"withdrawal_id": str(withdrawal.id), "bank": withdrawal.bank_name},
+                )
 
         audit_log_repository.create(
             db,

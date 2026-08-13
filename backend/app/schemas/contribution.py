@@ -6,6 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.enums import (
     ContributionStatus,
     Frequency,
+    FundingMethod,
+    MemberStatus,
+    PayoutStatus,
     ScheduleStatus,
     WithdrawalRuleType,
 )
@@ -49,6 +52,10 @@ class ContributionScheduleOut(BaseModel):
     due_date: datetime
     status: ScheduleStatus
     amount: int
+    paid_at: datetime | None = None
+    transaction_id: uuid.UUID | None = None
+    attempt_count: int = 0
+    failure_reason: str | None = None
 
 
 class ContributionMemberOut(BaseModel):
@@ -59,8 +66,27 @@ class ContributionMemberOut(BaseModel):
     display_name: str
     avatar: str | None
     position: int
+    payout_position: int | None = None
     total_contributed: int
+    status: MemberStatus
+    funding_method: FundingMethod
+    automatic: bool
+    next_payment_date: datetime | None = None
     joined_at: datetime
+
+
+class ContributionPayoutOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    contribution_id: uuid.UUID
+    member_id: uuid.UUID
+    round_number: int
+    scheduled_date: datetime
+    amount: int
+    status: PayoutStatus
+    paid_at: datetime | None = None
+    transaction_id: uuid.UUID | None = None
 
 
 class ContributionOut(BaseModel):
@@ -89,6 +115,7 @@ class ContributionOut(BaseModel):
     created_at: datetime
     members: list[ContributionMemberOut] = []
     schedule: list[ContributionScheduleOut] = []
+    payouts: list[ContributionPayoutOut] = []
 
 
 class ContributionList(BaseModel):
@@ -102,6 +129,7 @@ class ContributionList(BaseModel):
 class PayContributionRequest(BaseModel):
     schedule_id: int | None = None
     amount: int | None = Field(default=None, gt=0)
+    funding_method: FundingMethod = FundingMethod.WALLET
 
 
 class ContributionMemberAdd(BaseModel):

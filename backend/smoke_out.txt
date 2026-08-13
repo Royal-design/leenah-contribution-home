@@ -1,0 +1,74 @@
+C:\Users\USER\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+OK  register
+OK  auth/me
+OK  auth/me patch
+OK  users/me
+OK  users/me patch
+OK  users/me avatar delete
+OK  users/me avatar cleanup
+OK  auth/refresh bad token
+OK  auth/refresh
+OK  savings/account
+OK  savings/fund
+OK  savings/goals create
+OK  savings/goals get
+OK  savings/goals update
+OK  savings/goals list
+OK  transactions list
+OK  contributions list
+OK  withdrawals create
+OK  withdrawals list
+OK  notifications list
+OK  notifications unread
+OK  notifications read-all
+OK  register user2
+OK  contributions open user2
+OK  admin login
+OK  admin stats
+OK  admin roles
+OK  admin overview
+OK  admin users
+OK  admin user detail
+OK  admin contributions
+OK  admin transactions
+OK  admin withdrawals
+OK  admin create contribution
+OK  contributions admin-created get
+OK  user joins contribution
+OK  mock wallet funding
+OK  pay schedule from wallet
+OK  contributions after pay
+OK  duplicate schedule pay rejected
+OK  user create contribution blocked
+OK  user leaves contribution
+OK  contribution after leave (admin)
+OK  audit-logs list
+OK  audit-logs get
+OK  admin transaction revert
+OK  admin withdrawal review
+OK  admin user status
+OK  admin user status restore
+OK  admin user role
+OK  admin user role restore
+OK  audit-logs filtered
+OK  audit-logs search
+OK  audit-logs actions
+OK  support thread create
+OK  support threads list user
+OK  support threads list admin
+OK  support unread admin
+OK  support unread user
+OK  support admin reply
+OK  support thread detail user
+OK  support thread resolve
+OK  support threads admin after
+OK  admin create locked contribution
+OK  user2 join locked
+OK  admin create matured contribution
+OK  user2 join matured
+OK  matured contribution withdrawal allowed
+OK  admin guard for user2
+OK  audit-logs guard for user2
+
+ALL SMOKE TESTS PASSED
