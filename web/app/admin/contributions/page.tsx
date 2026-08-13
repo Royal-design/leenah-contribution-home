@@ -1,20 +1,43 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
-import { Plus } from "lucide-react"
+import { Plus, Search } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
+import { Pagination } from "@/components/ui/pagination"
 import { DataTable } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { useContributions } from "@/hooks/queries/use-contributions"
+import { useAdminContributions } from "@/hooks/queries/use-admin"
 import { formatDate, formatNaira } from "@/lib/format"
 import type { Contribution } from "@/types"
 
+const PAGE_SIZE = 10
+
 export default function AdminContributionsPage() {
-  const { data, isPending } = useContributions()
+  const [page, setPage] = React.useState(1)
+  const [search, setSearch] = React.useState("")
+  const [debouncedSearch, setDebouncedSearch] = React.useState("")
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const { data, isPending } = useAdminContributions({
+    page,
+    pageSize: PAGE_SIZE,
+    search: debouncedSearch || undefined,
+  })
+
+  const items = data?.items ?? []
 
   const columns: ColumnDef<Contribution>[] = [
     {
@@ -70,7 +93,9 @@ export default function AdminContributionsPage() {
       meta: { align: "right" },
       cell: ({ row }) => (
         <span className="text-muted-foreground">
-          {formatDate(row.original.withdrawalDate)}
+          {row.original.withdrawalDate
+            ? formatDate(row.original.withdrawalDate)
+            : "—"}
         </span>
       ),
     },
@@ -88,54 +113,80 @@ export default function AdminContributionsPage() {
         </Button>
       </PageHeader>
 
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          placeholder="Search by name or organization…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="max-w-sm pl-8"
+          aria-label="Search contributions"
+        />
+      </div>
+
       {isPending ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-10 w-full rounded-xl" />
           <Skeleton className="h-10 w-full rounded-xl" />
           <Skeleton className="h-10 w-full rounded-xl" />
         </div>
+      ) : items.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No contributions matched your search.
+        </p>
       ) : (
-        <div className="overflow-hidden rounded-xl bg-card shadow-sm">
-          <DataTable
-            columns={columns}
-            data={data ?? []}
-            mobileCard={({ original }) => (
-              <div className="flex flex-col gap-3">
-                <div className="flex items-start justify-between gap-3">
-                  <Link
-                    href={`/admin/contributions/${original.id}`}
-                    className="min-w-0 font-medium hover:text-primary hover:underline underline-offset-4"
-                  >
-                    {original.name}
-                  </Link>
-                  <StatusBadge status={original.status} />
+        <>
+          <div className="overflow-hidden rounded-xl bg-card shadow-sm">
+            <DataTable
+              columns={columns}
+              data={items}
+              mobileCard={({ original }) => (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <Link
+                      href={`/admin/contributions/${original.id}`}
+                      className="min-w-0 font-medium hover:text-primary hover:underline underline-offset-4"
+                    >
+                      {original.name}
+                    </Link>
+                    <StatusBadge status={original.status} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Amount</p>
+                      <p className="tabular-nums">
+                        {formatNaira(original.amount)} / {original.frequency}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Members</p>
+                      <p className="tabular-nums">{original.memberCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Progress</p>
+                      <p className="tabular-nums">{original.progress}%</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Starts</p>
+                      <p className="text-muted-foreground">
+                        {formatDate(original.startDate)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Amount</p>
-                    <p className="tabular-nums">
-                      {formatNaira(original.amount)} / {original.frequency}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Members</p>
-                    <p className="tabular-nums">{original.memberCount}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Progress</p>
-                    <p className="tabular-nums">{original.progress}%</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Starts</p>
-                    <p className="text-muted-foreground">
-                      {formatDate(original.startDate)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+              )}
+            />
+          </div>
+          <Pagination
+            page={data?.page ?? 1}
+            totalPages={data?.totalPages ?? 1}
+            onPageChange={setPage}
           />
-        </div>
+        </>
       )}
     </div>
   )

@@ -7,8 +7,13 @@ import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Pagination } from "@/components/ui/pagination"
 import { EmptyState } from "@/components/shared/empty-state"
-import { useNotifications, useMarkNotificationsRead } from "@/hooks/queries/use-transactions"
+import {
+  useNotifications,
+  useMarkNotificationsRead,
+  useMarkAllNotificationsRead,
+} from "@/hooks/queries/use-transactions"
 import { formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { NotificationType } from "@/types"
@@ -20,16 +25,18 @@ const typeIcons: Record<NotificationType, typeof Bell> = {
   system: Bell,
 }
 
-export default function NotificationsPage() {
-  const { data, isPending } = useNotifications()
-  const markRead = useMarkNotificationsRead()
+const PAGE_SIZE = 20
 
-  const unreadIds = (data ?? []).filter((n) => !n.read).map((n) => n.id)
+export default function NotificationsPage() {
+  const [page, setPage] = React.useState(1)
+  const { data, isPending } = useNotifications({ page, pageSize: PAGE_SIZE })
+  const markRead = useMarkNotificationsRead()
+  const markAllRead = useMarkAllNotificationsRead()
+
+  const items = data?.items ?? []
 
   function handleMarkAllRead() {
-    if (unreadIds.length > 0) {
-      markRead.mutate(unreadIds)
-    }
+    markAllRead.mutate()
   }
 
   return (
@@ -42,7 +49,7 @@ export default function NotificationsPage() {
           variant="outline"
           size="sm"
           onClick={handleMarkAllRead}
-          disabled={unreadIds.length === 0 || markRead.isPending}
+          disabled={markAllRead.isPending}
         >
           Mark all as read
         </Button>
@@ -56,19 +63,25 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {data && data.length === 0 && (
+      {!isPending && items.length === 0 && (
         <EmptyState title="You're all caught up" description="No notifications right now." />
       )}
 
-      {data && data.length > 0 && (
+      {!isPending && items.length > 0 && (
         <Card className="divide-y divide-border">
-          {data.map((notification) => {
+          {items.map((notification) => {
             const Icon = typeIcons[notification.type] ?? Bell
             return (
-              <div
+              <button
                 key={notification.id}
+                type="button"
+                onClick={() => {
+                  if (!notification.read) {
+                    markRead.mutate([notification.id])
+                  }
+                }}
                 className={cn(
-                  "flex items-start gap-3 px-4 py-4",
+                  "flex w-full items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/40",
                   !notification.read && "bg-primary/5"
                 )}
               >
@@ -103,11 +116,17 @@ export default function NotificationsPage() {
                     {formatRelativeTime(notification.createdAt)}
                   </p>
                 </div>
-              </div>
+              </button>
             )
           })}
         </Card>
       )}
+
+      <Pagination
+        page={data?.page ?? 1}
+        totalPages={data?.totalPages ?? 1}
+        onPageChange={setPage}
+      />
     </div>
   )
 }

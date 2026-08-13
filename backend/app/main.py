@@ -16,6 +16,7 @@ allowed_origins = {
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://leenah-contribution-home-web.vercel.app",
     *[origin.rstrip("/") for origin in settings.cors_allowed_origins],
 }
 

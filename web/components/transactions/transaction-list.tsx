@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { PiggyBank, Users, Wallet, ArrowLeftRight } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"

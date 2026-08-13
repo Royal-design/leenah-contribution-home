@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { apiChangePassword } from "@/lib/api/auth"
 
 const passwordSchema = z
   .object({
@@ -48,9 +49,17 @@ export default function SettingsPage() {
     },
   })
 
-  function onPasswordSubmit() {
-    toast.success("Password updated successfully.")
-    passwordForm.reset()
+  async function onPasswordSubmit(values: PasswordValues) {
+    try {
+      await apiChangePassword({
+        currentPassword: values.currentPassword,
+        newPassword: values.newPassword,
+      })
+      toast.success("Password updated successfully.")
+      passwordForm.reset()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update password.")
+    }
   }
 
   return (

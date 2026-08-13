@@ -1,13 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { Eye, Trash2, UserX, UserCheck, UserPlus, Upload } from "lucide-react"
+import { Eye, Trash2, UserX, UserCheck, UserPlus, Upload, Search } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
+import { Pagination } from "@/components/ui/pagination"
 import { DataTable } from "@/components/ui/data-table"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
@@ -21,12 +23,30 @@ import {
   useSetUserStatus,
 } from "@/hooks/queries/use-admin"
 import { useAuthStore } from "@/stores/auth-store"
-import { formatDate, getInitials, formatNaira } from "@/lib/format"
+import { formatDate, getInitials } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { Role, User } from "@/types"
 
+const PAGE_SIZE = 10
+
 export default function AdminUsersPage() {
-  const { data, isPending } = useAdminUsers()
+  const [page, setPage] = React.useState(1)
+  const [search, setSearch] = React.useState("")
+  const [debouncedSearch, setDebouncedSearch] = React.useState("")
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const { data, isPending } = useAdminUsers({
+    page,
+    pageSize: PAGE_SIZE,
+    search: debouncedSearch || undefined,
+  })
   const setUserStatus = useSetUserStatus()
   const setUserRole = useSetUserRole()
   const deleteUser = useDeleteUser()
@@ -39,6 +59,8 @@ export default function AdminUsersPage() {
     action: "suspended" | "active"
   } | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<User | null>(null)
+
+  const items = data?.items ?? []
 
   const columns: ColumnDef<User>[] = [
     {
@@ -100,16 +122,6 @@ export default function AdminUsersPage() {
           {formatDate(row.original.joinedAt)}
         </span>
       ),
-    },
-    {
-      id: "activeContributions",
-      header: "Contributions",
-      cell: () => <span className="tabular-nums">2</span>,
-    },
-    {
-      id: "savings",
-      header: "Savings",
-      cell: () => <span className="tabular-nums">{formatNaira(85000)}</span>,
     },
     {
       accessorKey: "status",
@@ -221,17 +233,37 @@ export default function AdminUsersPage() {
         </div>
       </PageHeader>
 
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          placeholder="Search by name or email…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="max-w-sm pl-8"
+          aria-label="Search users"
+        />
+      </div>
+
       {isPending ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-10 w-full rounded-xl" />
           <Skeleton className="h-10 w-full rounded-xl" />
           <Skeleton className="h-10 w-full rounded-xl" />
         </div>
+      ) : items.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No users matched your search.
+        </p>
       ) : (
-        <div className="overflow-hidden rounded-xl bg-card shadow-sm">
+        <>
+          <div className="overflow-hidden rounded-xl bg-card shadow-sm">
             <DataTable
               columns={columns}
-              data={data ?? []}
+              data={items}
               mobileCard={({ original }) => (
                 <div className="flex flex-col gap-3">
                   <div className="flex items-start justify-between gap-3">
@@ -271,7 +303,9 @@ export default function AdminUsersPage() {
                         {original.role}
                       </span>
                       <span className="text-muted-foreground">·</span>
-                      <span className="tabular-nums">{formatNaira(85000)}</span>
+                      <span className="text-muted-foreground">
+                        {formatDate(original.joinedAt)}
+                      </span>
                     </div>
                     {original.id !== currentUserId && (
                       <div className="flex items-center gap-1">
@@ -323,6 +357,12 @@ export default function AdminUsersPage() {
               )}
             />
           </div>
+          <Pagination
+            page={data?.page ?? 1}
+            totalPages={data?.totalPages ?? 1}
+            onPageChange={setPage}
+          />
+        </>
       )}
 
       <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />

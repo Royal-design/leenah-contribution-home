@@ -8,12 +8,16 @@ import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Pagination } from "@/components/ui/pagination"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DataTable } from "@/components/ui/data-table"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { useAdminWithdrawals, useReviewWithdrawal } from "@/hooks/queries/use-admin"
 import { formatDate, formatNaira } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { Withdrawal } from "@/types"
+
+const PAGE_SIZE = 10
 
 const statusMeta: Record<Withdrawal["status"], { label: string; className: string }> = {
   pending: {
@@ -48,10 +52,12 @@ export function WithdrawalsTable({
 }) {
   const columns: ColumnDef<Withdrawal>[] = [
     {
-      accessorKey: "userName",
-      header: "User",
+      accessorKey: "accountName",
+      header: "Account",
       cell: ({ row }) => (
-        <span className="font-medium">{row.original.userName}</span>
+        <span className="font-medium">
+          {row.original.accountName || row.original.destination}
+        </span>
       ),
     },
     {
@@ -81,7 +87,9 @@ export function WithdrawalsTable({
       accessorKey: "destination",
       header: "Destination",
       cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.destination}</span>
+        <span className="max-w-[14rem] truncate text-muted-foreground">
+          {row.original.destination}
+        </span>
       ),
     },
     {
@@ -108,16 +116,17 @@ export function WithdrawalsTable({
             </span>
           )
         }
+        const name = row.original.accountName || row.original.destination
         return (
           <div className="flex items-center justify-end gap-1">
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`Approve ${row.original.userName}'s withdrawal`}
+              aria-label={`Approve ${name}'s withdrawal`}
               onClick={() =>
                 onReview({
                   id: row.original.id,
-                  name: row.original.userName,
+                  name,
                   amount: row.original.amount,
                   action: "approved",
                 })
@@ -128,11 +137,11 @@ export function WithdrawalsTable({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`Reject ${row.original.userName}'s withdrawal`}
+              aria-label={`Reject ${name}'s withdrawal`}
               onClick={() =>
                 onReview({
                   id: row.original.id,
-                  name: row.original.userName,
+                  name,
                   amount: row.original.amount,
                   action: "rejected",
                 })
@@ -153,11 +162,12 @@ export function WithdrawalsTable({
       emptyText="No withdrawals found."
       mobileCard={({ original }) => {
         const status = statusMeta[original.status]
+        const name = original.accountName || original.destination
         return (
           <div className="flex flex-col gap-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-medium">{original.userName}</p>
+                <p className="truncate font-medium">{name}</p>
                 <p className="mt-0.5 text-sm text-muted-foreground capitalize">
                   {original.type} · {formatDate(original.requestedAt)}
                 </p>
@@ -180,11 +190,11 @@ export function WithdrawalsTable({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`Approve ${original.userName}'s withdrawal`}
+                    aria-label={`Approve ${name}'s withdrawal`}
                     onClick={() =>
                       onReview({
                         id: original.id,
-                        name: original.userName,
+                        name,
                         amount: original.amount,
                         action: "approved",
                       })
@@ -195,11 +205,11 @@ export function WithdrawalsTable({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`Reject ${original.userName}'s withdrawal`}
+                    aria-label={`Reject ${name}'s withdrawal`}
                     onClick={() =>
                       onReview({
                         id: original.id,
-                        name: original.userName,
+                        name,
                         amount: original.amount,
                         action: "rejected",
                       })
@@ -222,7 +232,16 @@ export function WithdrawalsTable({
 }
 
 export default function AdminWithdrawalsPage() {
-  const { data, isPending } = useAdminWithdrawals()
+  const [page, setPage] = React.useState(1)
+  const [status, setStatus] = React.useState<"all" | "pending" | "approved" | "rejected" | "completed">(
+    "pending"
+  )
+
+  const { data, isPending } = useAdminWithdrawals({
+    page,
+    pageSize: PAGE_SIZE,
+    status: status === "all" ? undefined : status,
+  })
   const reviewWithdrawal = useReviewWithdrawal()
   const [pendingReview, setPendingReview] = React.useState<{
     id: string
@@ -231,8 +250,7 @@ export default function AdminWithdrawalsPage() {
     action: "approved" | "rejected"
   } | null>(null)
 
-  const pendingItems = (data ?? []).filter((w) => w.status === "pending")
-  const resolvedItems = (data ?? []).filter((w) => w.status !== "pending")
+  const items = data?.items ?? []
 
   return (
     <div className="flex flex-col gap-8">
@@ -241,46 +259,46 @@ export default function AdminWithdrawalsPage() {
         description="Review and manage withdrawal requests."
       />
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={status} onValueChange={(value) => {
+            setStatus(value as typeof status)
+            setPage(1)
+          }}>
+          <SelectTrigger className="w-full sm:w-48" aria-label="Filter by status">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="all">All</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {isPending ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-10 w-full rounded-xl" />
           <Skeleton className="h-10 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-xl" />
         </div>
+      ) : items.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No withdrawals found.
+        </p>
       ) : (
         <>
-          <section aria-label="Pending withdrawals">
-            <h2 className="font-heading text-lg font-medium tracking-tight">
-              Pending{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                {pendingItems.length}
-              </span>
-            </h2>
-            <div className="mt-4 overflow-hidden rounded-xl bg-card shadow-sm">
-              <div className="overflow-x-auto">
-                <WithdrawalsTable
-                  items={pendingItems}
-                  onReview={setPendingReview}
-                />
-              </div>
+          <div className="overflow-hidden rounded-xl bg-card shadow-sm">
+            <div className="overflow-x-auto">
+              <WithdrawalsTable items={items} onReview={setPendingReview} />
             </div>
-          </section>
-
-          <section aria-label="Resolved withdrawals">
-            <h2 className="font-heading text-lg font-medium tracking-tight">
-              Reviewed{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                {resolvedItems.length}
-              </span>
-            </h2>
-            <div className="mt-4 overflow-hidden rounded-xl bg-card shadow-sm">
-              <div className="overflow-x-auto">
-                <WithdrawalsTable
-                  items={resolvedItems}
-                  onReview={setPendingReview}
-                />
-              </div>
-            </div>
-          </section>
+          </div>
+          <Pagination
+            page={data?.page ?? 1}
+            totalPages={data?.totalPages ?? 1}
+            onPageChange={setPage}
+          />
         </>
       )}
 

@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import * as z from "zod"
 import { toast } from "sonner"
-import { Camera, IdCard, ShieldCheck, Mail, Phone, Plus, Trash2, UserRound } from "lucide-react"
+import { Camera, IdCard, ShieldCheck, Mail, Phone, Trash2, UserRound } from "lucide-react"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Avatar, AvatarFallback, AvatarImage, AvatarBadge } from "@/components/ui/avatar"
@@ -23,6 +23,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { useAuthStore } from "@/stores/auth-store"
+import { apiUpdateAvatar } from "@/lib/api/users"
+import { apiUpdateProfile } from "@/lib/api/auth"
 import { formatDate, getInitials } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -64,13 +66,21 @@ export default function ProfilePage() {
     },
   })
 
-  function onSubmit(values: FormValues) {
-    if (!user) return
-    setUser({ ...user, ...values })
-    toast.success("Profile updated successfully.")
+  async function onSubmit(values: FormValues) {
+    try {
+      const updated = await apiUpdateProfile({
+        firstName: values.firstName,
+        lastName: values.lastName,
+        phone: values.phone,
+      })
+      setUser(updated)
+      toast.success("Profile updated successfully.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update profile.")
+    }
   }
 
-  function onPhotoPicked(event: React.ChangeEvent<HTMLInputElement>) {
+  async function onPhotoPicked(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -79,13 +89,16 @@ export default function ProfilePage() {
       return
     }
 
-    const preview = URL.createObjectURL(file)
-    if (user) {
-      setUser({ ...user, photo: preview })
-    }
-    toast.success("Profile photo updated.")
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
+    try {
+      const updated = await apiUpdateAvatar(file)
+      setUser(updated)
+      toast.success("Profile photo updated.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update profile photo.")
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
     }
   }
 

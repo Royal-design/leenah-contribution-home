@@ -3,9 +3,8 @@
 import * as React from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { ChevronLeft, Users, Wallet, CircleCheck, Circle } from "lucide-react"
+import { ChevronLeft, Wallet, CircleCheck, Circle } from "lucide-react"
 
-import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { ContributionProgress } from "@/components/contributions/contribution-progress"
 import { Button } from "@/components/ui/button"
@@ -14,6 +13,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FundContributionDialog } from "@/components/forms/fund-contribution-dialog"
 import { useContribution } from "@/hooks/queries/use-contributions"
+import { useAuthStore } from "@/stores/auth-store"
 import { formatDate, formatLongDate, formatNaira, getInitials } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -21,6 +21,7 @@ export default function ContributionDetailPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
   const { data: contribution, isPending, isError } = useContribution(id)
+  const currentUserId = useAuthStore((state) => state.user?.id)
   const [fundOpen, setFundOpen] = React.useState(false)
 
   if (isPending) {
@@ -52,6 +53,10 @@ export default function ContributionDetailPage() {
     contribution.status === "completed" ||
     (contribution.withdrawalDate &&
       new Date(contribution.withdrawalDate) <= new Date())
+
+  const currentMember = contribution.members.find(
+    (member) => member.userId === currentUserId
+  )
 
   return (
     <div className="flex flex-col gap-8">
@@ -103,7 +108,7 @@ export default function ContributionDetailPage() {
               </div>
               <div>
                 <dt className="text-muted-foreground">Your position</dt>
-                <dd className="font-medium">{contribution.currentUserPosition ?? "—"}</dd>
+                <dd className="font-medium">{currentMember?.position ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Started</dt>
@@ -173,7 +178,7 @@ export default function ContributionDetailPage() {
                   The schedule will populate once the cycle begins.
                 </p>
               )}
-              {contribution.schedule.map((entry, index) => {
+              {contribution.schedule.map((entry) => {
                 const isPaid = entry.status === "paid"
                 const isPending = entry.status === "pending"
                 return (
@@ -234,7 +239,7 @@ export default function ContributionDetailPage() {
           </CardHeader>
           <CardContent>
             {contribution.members.map((member) => {
-              const isCurrent = member.id === "mbr_0" || member.position === contribution.currentUserPosition
+              const isCurrent = member.userId === currentUserId
               return (
                 <div
                   key={member.id}

@@ -1,5 +1,5 @@
-import { getDb } from "@/lib/api/db"
-import { mockMutation, mockRequest } from "@/lib/api/client"
+import { api } from "@/lib/api/http"
+import { mapUser, type RawUser } from "@/lib/api/mappers"
 import type { User } from "@/types"
 
 export interface LoginPayload {
@@ -15,54 +15,111 @@ export interface RegisterPayload {
   password: string
 }
 
-export function apiGetCurrentUser(): Promise<User> {
-  const [user] = getDb().users
-  return mockRequest(user)
+export interface AuthResult {
+  user: User
+  accessToken: string
+  refreshToken: string
 }
 
-export function apiDeleteAccount(userId: string): Promise<void> {
-  return mockMutation(() => {
-    getDb().users = getDb().users.filter((entry) => entry.id !== userId)
-  }, 500)
+export interface UpdateProfilePayload {
+  firstName?: string
+  lastName?: string
+  phone?: string
 }
 
-export function apiRegister(payload: RegisterPayload): Promise<User> {
-  return mockMutation(() => {
-    const existing = getDb().users.find(
-      (user) => user.email.toLowerCase() === payload.email.toLowerCase()
-    )
-    if (existing) {
-      throw new Error("An account with this email already exists.")
-    }
+interface RawAuthResponse {
+  user: RawUser
+  access_token: string
+  refresh_token: string
+  token_type: string
+}
 
-    const user: User = {
-      id: `usr_${Date.now()}`,
-      firstName: payload.firstName,
-      lastName: payload.lastName,
-      email: payload.email,
-      phone: payload.phone,
-      role: "user",
-      status: "active",
-      joinedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    }
+interface RawTokenResponse {
+  access_token: string
+  refresh_token: string
+  token_type: string
+}
 
-    getDb().users.push(user)
-    return user
+export interface ChangePasswordPayload {
+  currentPassword: string
+  newPassword: string
+}
+
+export async function apiLogin(payload: LoginPayload): Promise<AuthResult> {
+  const { data } = await api.post<RawAuthResponse>("/api/auth/login", payload)
+  return {
+    user: mapUser(data.user),
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+  }
+}
+
+export async function apiGoogleLogin(accessToken: string): Promise<AuthResult> {
+  const { data } = await api.post<RawAuthResponse>("/api/auth/google", {
+    access_token: accessToken,
+  })
+  return {
+    user: mapUser(data.user),
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+  }
+}
+
+export async function apiRegister(payload: RegisterPayload): Promise<AuthResult> {
+  const { data } = await api.post<RawAuthResponse>("/api/auth/register", {
+    first_name: payload.firstName,
+    last_name: payload.lastName,
+    email: payload.email,
+    phone: payload.phone,
+    password: payload.password,
+  })
+  return {
+    user: mapUser(data.user),
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+  }
+}
+
+export async function apiRefresh(refreshToken: string): Promise<RawTokenResponse> {
+  const { data } = await api.post<RawTokenResponse>("/api/auth/refresh", {
+    refresh_token: refreshToken,
+  })
+  return data
+}
+
+export async function apiLogout(refreshToken: string): Promise<void> {
+  await api.post("/api/auth/logout", { refresh_token: refreshToken })
+}
+
+export async function apiGetCurrentUser(): Promise<User> {
+  const { data } = await api.get<RawUser>("/api/auth/me")
+  return mapUser(data)
+}
+
+export async function apiUpdateProfile(payload: UpdateProfilePayload): Promise<User> {
+  const { data } = await api.patch<RawUser>("/api/auth/me", {
+    first_name: payload.firstName,
+    last_name: payload.lastName,
+    phone: payload.phone,
+  })
+  return mapUser(data)
+}
+
+export async function apiChangePassword(payload: ChangePasswordPayload): Promise<void> {
+  await api.patch("/api/auth/me/password", {
+    current_password: payload.currentPassword,
+    new_password: payload.newPassword,
   })
 }
 
-export function apiLogin(payload: LoginPayload): Promise<User> {
-  return mockMutation(() => {
-    const user = getDb().users.find(
-      (entry) => entry.email.toLowerCase() === payload.email.toLowerCase()
-    )
-    if (!user) {
-      throw new Error("Invalid email or password.")
-    }
-    if (user.status === "suspended") {
-      throw new Error("This account has been suspended. Contact support.")
-    }
-    return user
-  })
+export async function apiDeleteAccount(): Promise<void> {
+  await api.delete("/api/auth/me")
+}
+
+export async function apiRequestPasswordReset(email: string): Promise<void> {
+  await api.post("/api/auth/password-reset/request", { email })
+}
+
+export async function apiConfirmPasswordReset(token: string, newPassword: string): Promise<void> {
+  await api.post("/api/auth/password-reset/confirm", { token, new_password: newPassword })
 }

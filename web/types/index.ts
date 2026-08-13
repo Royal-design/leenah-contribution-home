@@ -27,6 +27,7 @@ export type ContributionStatus =
 
 export interface ContributionMember {
   id: string
+  userId?: string
   name: string
   avatar?: string
   position: number
@@ -54,6 +55,7 @@ export interface Contribution {
   amount: number
   frequency: Frequency
   memberCount: number
+  rounds: number
   startDate: string
   endDate: string
   withdrawalDate: string
@@ -122,6 +124,87 @@ export interface Withdrawal {
   destination: string
   status: WithdrawalStatus
   contributionName?: string
+  bankName?: string
+  accountName?: string
+  accountNumber?: string
+  reviewedAt?: string
+}
+
+export type SupportCategory =
+  | "general"
+  | "account"
+  | "contribution"
+  | "savings"
+  | "withdrawal"
+  | "other"
+
+export type SupportStatus = "open" | "replied" | "resolved"
+
+export interface SupportMessage {
+  id: string
+  threadId: string
+  senderId?: string
+  senderRole: string
+  senderName: string
+  body: string
+  isRead: boolean
+  createdAt: string
+}
+
+export interface SupportThread {
+  id: string
+  userId: string
+  subject: string
+  category: SupportCategory
+  status: SupportStatus
+  unreadCount: number
+  lastMessageAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SupportThreadDetail extends SupportThread {
+  messages: SupportMessage[]
+}
+
+export type AuditAction =
+  | "create"
+  | "update"
+  | "delete"
+  | "approve"
+  | "reject"
+  | "revert"
+  | "suspend"
+  | "reactivate"
+  | "invite"
+  | "login"
+  | "logout"
+  | "settings_update"
+
+export type AuditCategory =
+  | "user"
+  | "contribution"
+  | "savings"
+  | "withdrawal"
+  | "transaction"
+  | "system"
+  | "settings"
+
+export interface AuditLog {
+  id: string
+  actorId?: string
+  actorName?: string
+  actorEmail?: string
+  actorRole?: string
+  action: AuditAction
+  category: AuditCategory
+  description: string
+  target?: string
+  targetId?: string
+  details?: Record<string, unknown>
+  ipAddress?: string
+  userAgent?: string
+  createdAt: string
 }
 
 export type NotificationType = "contribution" | "savings" | "withdrawal" | "system"

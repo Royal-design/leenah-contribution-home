@@ -17,6 +17,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { apiConfirmPasswordReset } from "@/lib/api/auth"
 
 const formSchema = z.object({
   password: z
@@ -44,15 +45,29 @@ function ResetPasswordForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get("token")
+  const [submitting, setSubmitting] = React.useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { password: "", confirmPassword: "" },
   })
 
-  function onSubmit() {
-    toast.success("Your password has been reset.")
-    router.push("/login")
+  async function onSubmit(values: FormValues) {
+    if (!token) return
+    setSubmitting(true)
+    try {
+      await apiConfirmPasswordReset(token, values.password)
+      toast.success("Your password has been reset. Sign in with your new password.")
+      router.push("/login")
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not reset your password. The link may have expired."
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -118,8 +133,8 @@ function ResetPasswordForm() {
             </Field>
           </FieldGroup>
 
-          <Button type="submit" size="lg" disabled={form.formState.isSubmitting}>
-            Reset password
+          <Button type="submit" size="lg" disabled={form.formState.isSubmitting || submitting}>
+            {submitting ? "Resetting…" : "Reset password"}
           </Button>
         </form>
       )}

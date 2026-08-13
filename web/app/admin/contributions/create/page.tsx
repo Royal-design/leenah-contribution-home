@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm, type Resolver } from "react-hook-form"
 import * as z from "zod"
-import { toast } from "sonner"
 import { ChevronLeft, Save } from "lucide-react"
 
 import { PageHeader } from "@/components/shared/page-header"
@@ -24,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { StatusBadge } from "@/components/shared/status-badge"
+import { useAdminCreateContribution } from "@/hooks/queries/use-admin"
 import { formatDate, formatNaira } from "@/lib/format"
 import type { ContributionStatus, Frequency } from "@/types"
 
@@ -74,6 +74,7 @@ type FormValues = z.infer<typeof formSchema>
 
 export default function CreateContributionPage() {
   const router = useRouter()
+  const createContribution = useAdminCreateContribution()
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema) as Resolver<FormValues>,
@@ -95,8 +96,29 @@ export default function CreateContributionPage() {
   const watched = form.watch()
 
   function onSubmit(values: FormValues) {
-    toast.success(`Contribution plan "${values.name}" saved.`)
-    router.push("/admin/contributions")
+    const rounds =
+      values.frequency === "weekly"
+        ? 52
+        : values.frequency === "biweekly"
+          ? 26
+          : values.frequency === "monthly"
+            ? 12
+            : 12
+    createContribution.mutate(
+      {
+        name: values.name,
+        description: values.description,
+        amount: values.amount,
+        frequency: values.frequency,
+        memberCount: values.memberCount,
+        rounds,
+        startDate: values.startDate,
+        withdrawalDate: values.withdrawalDate,
+      },
+      {
+        onSuccess: () => router.push("/admin/contributions"),
+      }
+    )
   }
 
   return (
@@ -361,9 +383,15 @@ export default function CreateContributionPage() {
             </CardContent>
           </Card>
 
-          <Button type="submit" size="lg" disabled={form.formState.isSubmitting}>
+          <Button
+            type="submit"
+            size="lg"
+            disabled={form.formState.isSubmitting || createContribution.isPending}
+          >
             <Save />
-            {form.formState.isSubmitting ? "Saving…" : "Save plan"}
+            {form.formState.isSubmitting || createContribution.isPending
+              ? "Saving…"
+              : "Save plan"}
           </Button>
         </form>
 

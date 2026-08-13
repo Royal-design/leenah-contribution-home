@@ -80,7 +80,6 @@ export function UserMenu({ isAdmin }: { isAdmin: boolean }) {
 
 export function TopHeader({ isAdmin }: { isAdmin: boolean }) {
   const router = useRouter()
-  const notifications = useAuthStore((state) => state.user)
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">

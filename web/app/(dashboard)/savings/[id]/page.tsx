@@ -10,11 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SavingsGoalProgress } from "@/components/contributions/contribution-progress"
-import { EmptyState } from "@/components/shared/empty-state"
 import { FundingDialog } from "@/components/forms/funding-dialog"
 import { useSavings } from "@/hooks/queries/use-savings"
 import { formatDate, formatMonthYear, formatNaira } from "@/lib/format"
-import { getSavingsGoalById } from "@/lib/mock/savings"
 
 export default function SavingsDetailPage() {
   const params = useParams<{ id: string }>()

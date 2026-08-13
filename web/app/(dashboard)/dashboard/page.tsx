@@ -33,8 +33,7 @@ import { useAuthStore } from "@/stores/auth-store"
 import { useContributions } from "@/hooks/queries/use-contributions"
 import { useSavings, useSavingsGrowth } from "@/hooks/queries/use-savings"
 import { useRecentTransactions } from "@/hooks/queries/use-transactions"
-import { dashboardOverview } from "@/lib/mock/dashboard"
-import { formatNaira } from "@/lib/format"
+import { formatNaira, formatShortMonth } from "@/lib/format"
 
 export default function DashboardPage() {
   const user = useAuthStore((state) => state.user)
@@ -51,16 +50,32 @@ export default function DashboardPage() {
     return <PageSkeleton />
   }
 
-  const data = dashboardOverview
-  const activeContributionsList = (contributions.data ?? []).filter(
+  const contributionItems = contributions.data?.items ?? []
+
+  const activeContributionsList = contributionItems.filter(
     (contribution) => contribution.status !== "completed"
   )
-  const totalContributions = (contributions.data ?? []).reduce(
+  const totalContributions = contributionItems.reduce(
     (sum, contribution) => sum + contribution.totalContributed,
     0
   )
   const totalBalance = (savings.data?.balance ?? 0) + totalContributions
-  const next = data.upcomingContribution
+
+  const monthlyInflow = (recentTxns.data ?? [])
+    .filter((txn) => txn.type !== "withdrawal")
+    .reduce((sum, txn) => sum + txn.amount, 0)
+
+  const next = contributionItems
+    .filter((contribution) => contribution.status !== "completed")
+    .sort(
+      (a, b) =>
+        new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime()
+    )[0]
+
+  const contributionActivity = contributionItems.map((contribution) => ({
+    month: formatShortMonth(contribution.startDate),
+    contributions: contribution.totalContributed,
+  }))
 
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
@@ -74,7 +89,7 @@ export default function DashboardPage() {
         <BalanceSummary
           balance={totalBalance}
           wallet={savings.data?.balance ?? 0}
-          savings={data.totalSavings}
+          savings={savings.data?.totalSaved ?? 0}
           activePlanCount={activeContributionsList.length}
           activePlanAmount={totalContributions}
           onDeposit={() => setFundingOpen(true)}
@@ -87,21 +102,25 @@ export default function DashboardPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <DashboardStatCard
             title="Protected funds"
-            value={formatNaira(data.totalSavings)}
+            value={formatNaira(savings.data?.totalSaved ?? 0)}
             description="Locked savings"
             icon={PiggyBank}
             tone="success"
           />
           <DashboardStatCard
             title="Monthly inflow"
-            value={formatNaira(data.nextContribution.amount * 2)}
-            description="Added this month"
+            value={formatNaira(monthlyInflow)}
+            description="Recent additions"
             icon={Wallet}
           />
           <DashboardStatCard
             title="Next contribution"
             value={formatNaira(next?.amount ?? 0)}
-            description={next ? `Due ${next.nextPaymentDate.split("T")[0]}` : "No due payments"}
+            description={
+              next && next.nextPaymentDate
+                ? `Due ${next.nextPaymentDate.split("T")[0]}`
+                : "No due payments"
+            }
             icon={CalendarClock}
             tone="warning"
           />
@@ -210,14 +229,14 @@ export default function DashboardPage() {
               description="Your savings balance over time."
             />
             <div className="mt-4 flex-1">
-              <SavingsGrowthChart data={growth.data ?? data.savingsGrowth} />
+              <SavingsGrowthChart data={growth.data ?? []} />
             </div>
           </div>
         </section>
       )}
 
       <section aria-label="Analytics" className="grid gap-4 xl:grid-cols-2">
-        <ContributionActivityChart data={data.contributionActivity} />
+        <ContributionActivityChart data={contributionActivity} />
       </section>
 
       <FundingDialog open={fundingOpen} onOpenChange={setFundingOpen} />

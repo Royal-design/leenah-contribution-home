@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { Plus } from "lucide-react"
 
@@ -8,20 +9,29 @@ import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageSkeleton } from "@/components/shared/skeletons"
+import { Pagination } from "@/components/ui/pagination"
 import { useContributions } from "@/hooks/queries/use-contributions"
 import type { Contribution } from "@/types"
 
+const PAGE_SIZE = 9
+
 export default function ContributionsPage() {
-  const { data, isPending, isError, refetch } = useContributions()
+  const [page, setPage] = React.useState(1)
+  const { data, isPending, isError, refetch } = useContributions({
+    page,
+    pageSize: PAGE_SIZE,
+  })
 
   if (isPending) {
     return <PageSkeleton />
   }
 
+  const items = data?.items ?? []
+
   const groups: Array<{ label: string; items: Contribution[] }> = [
-    { label: "Active", items: (data ?? []).filter((c) => c.status === "active") },
-    { label: "Upcoming", items: (data ?? []).filter((c) => c.status === "upcoming") },
-    { label: "Completed", items: (data ?? []).filter((c) => c.status === "completed") },
+    { label: "Active", items: items.filter((c) => c.status === "active") },
+    { label: "Upcoming", items: items.filter((c) => c.status === "upcoming") },
+    { label: "Completed", items: items.filter((c) => c.status === "completed") },
   ]
 
   return (
@@ -45,7 +55,7 @@ export default function ContributionsPage() {
         </div>
       )}
 
-      {data?.length === 0 && (
+      {items.length === 0 && (
         <EmptyState
           title="No contributions yet"
           description="Join a contribution circle to start building with others."
@@ -76,6 +86,12 @@ export default function ContributionsPage() {
             </div>
           </section>
         ))}
+
+      <Pagination
+        page={data?.page ?? 1}
+        totalPages={data?.totalPages ?? 1}
+        onPageChange={setPage}
+      />
     </div>
   )
 }

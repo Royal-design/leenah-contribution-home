@@ -18,17 +18,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { PageHeader } from "@/components/shared/page-header"
-import { availableContributionsToJoin } from "@/lib/mock/contributions"
-import { formatDate, formatMonthYear, formatNaira } from "@/lib/format"
-import { useJoinContribution } from "@/hooks/queries/use-contributions"
+import { Skeleton } from "@/components/ui/skeleton"
+import { formatDate, formatNaira } from "@/lib/format"
+import { useOpenContributions, useCreateContribution } from "@/hooks/queries/use-contributions"
 import { cn } from "@/lib/utils"
-
-const planMap = new Map(availableContributionsToJoin.map((plan) => [plan.id, plan]))
 
 const formSchema = z
   .object({
@@ -62,7 +59,11 @@ type FormValues = z.infer<typeof formSchema>
 
 export default function JoinContributionPage() {
   const router = useRouter()
-  const joinContribution = useJoinContribution()
+  const createContribution = useCreateContribution()
+  const openContributions = useOpenContributions({ page: 1, pageSize: 50 })
+
+  const plans = openContributions.data?.items ?? []
+  const planMap = new Map(plans.map((plan) => [plan.id, plan]))
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema) as Resolver<FormValues>,
@@ -92,14 +93,15 @@ export default function JoinContributionPage() {
   }
 
   function onSubmit(values: FormValues) {
-    joinContribution.mutate(
+    createContribution.mutate(
       {
-        contributionId: values.planId,
         name: selectedPlan?.name ?? "My Contribution",
+        description: selectedPlan?.description,
         amount: values.amount,
         frequency: values.frequency,
         startDate: values.startDate,
         memberCount: values.memberCount,
+        rounds: values.rounds,
         withdrawalDate: values.withdrawalDate,
       },
       {
@@ -128,37 +130,51 @@ export default function JoinContributionPage() {
               <CardDescription>Choose an existing circle to join.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-2">
-                {availableContributionsToJoin.map((plan) => {
-                  const active = form.watch("planId") === plan.id
-                  return (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => onPlanChange(plan.id)}
-                      aria-pressed={active}
-                      className={cn(
-                        "flex flex-col gap-1 rounded-lg border p-4 text-left transition-colors",
-                        active
-                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                          : "hover:border-border hover:bg-muted/40"
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-medium">{plan.name}</span>
-                        <Badge variant="outline">{plan.frequency}</Badge>
-                      </div>
-                      <span className="text-sm text-muted-foreground">
-                        {formatNaira(plan.amount)} / {plan.frequency} · {plan.memberCount} members ·{" "}
-                        {plan.rounds} rounds
-                      </span>
-                      <span className="mt-1 text-sm text-muted-foreground">
-                        Starts {formatDate(plan.startDate)}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
+              {openContributions.isPending ? (
+                <div className="flex flex-col gap-2">
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <Skeleton key={index} className="h-24 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {plans.length === 0 && (
+                    <p className="py-4 text-sm text-muted-foreground">
+                      No open contribution circles right now — you can still create
+                      your own below.
+                    </p>
+                  )}
+                  {plans.map((plan) => {
+                    const active = form.watch("planId") === plan.id
+                    return (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => onPlanChange(plan.id)}
+                        aria-pressed={active}
+                        className={cn(
+                          "flex flex-col gap-1 rounded-lg border p-4 text-left transition-colors",
+                          active
+                            ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                            : "hover:border-border hover:bg-muted/40"
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium">{plan.name}</span>
+                          <Badge variant="outline">{plan.frequency}</Badge>
+                        </div>
+                        <span className="text-sm text-muted-foreground">
+                          {formatNaira(plan.amount)} / {plan.frequency} · {plan.memberCount} members ·{" "}
+                          {plan.rounds} rounds
+                        </span>
+                        <span className="mt-1 text-sm text-muted-foreground">
+                          Starts {formatDate(plan.startDate)}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               <FieldError errors={form.formState.errors.planId ? [form.formState.errors.planId] : []} />
             </CardContent>
           </Card>
@@ -357,11 +373,11 @@ export default function JoinContributionPage() {
           <Button
             type="submit"
             size="lg"
-            disabled={form.formState.isSubmitting || joinContribution.isPending}
+            disabled={form.formState.isSubmitting || createContribution.isPending}
           >
-            {form.formState.isSubmitting || joinContribution.isPending
-              ? "Joining…"
-              : "Confirm and join"}
+            {form.formState.isSubmitting || createContribution.isPending
+              ? "Creating…"
+              : "Confirm and create"}
           </Button>
         </form>
 

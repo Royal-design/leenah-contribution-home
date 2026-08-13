@@ -15,6 +15,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { apiRequestPasswordReset } from "@/lib/api/auth"
 
 const formSchema = z.object({
   email: z.string().trim().min(1, "Enter your email address.").email("Enter a valid email address."),
@@ -24,15 +25,27 @@ type FormValues = z.infer<typeof formSchema>
 
 export default function ForgotPasswordPage() {
   const [sent, setSent] = React.useState(false)
+  const [submitting, setSubmitting] = React.useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { email: "" },
   })
 
-  function onSubmit() {
-    setSent(true)
-    toast.success("If that account exists, a reset link was sent.")
+  async function onSubmit(values: FormValues) {
+    setSubmitting(true)
+    try {
+      await apiRequestPasswordReset(values.email)
+      setSent(true)
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (sent) {
@@ -86,8 +99,8 @@ export default function ForgotPasswordPage() {
           </Field>
         </FieldGroup>
 
-        <Button type="submit" size="lg" disabled={form.formState.isSubmitting}>
-          Send reset link
+        <Button type="submit" size="lg" disabled={form.formState.isSubmitting || submitting}>
+          {submitting ? "Sending…" : "Send reset link"}
         </Button>
       </form>
 

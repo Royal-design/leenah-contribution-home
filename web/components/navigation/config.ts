@@ -8,6 +8,8 @@ import {
   User,
   Settings,
   Wallet,
+  LifeBuoy,
+  ScrollText,
 } from "lucide-react"
 
 export interface NavItem {
@@ -35,6 +37,7 @@ export const userNavGroups: Array<{
     label: "Account",
     items: [
       { label: "Profile", href: "/profile", icon: User },
+      { label: "Help & Support", href: "/support", icon: LifeBuoy },
       { label: "Settings", href: "/settings", icon: Settings },
     ],
   },
@@ -52,6 +55,7 @@ export const adminNavGroups: Array<{
       { label: "Users", href: "/admin/users", icon: User },
       { label: "Withdrawals", href: "/admin/withdrawals", icon: Wallet },
       { label: "Transactions", href: "/admin/transactions", icon: ArrowLeftRight },
+      { label: "Audit Logs", href: "/admin/audit-logs", icon: ScrollText },
     ],
   },
   {
