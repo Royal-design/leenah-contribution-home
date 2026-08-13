@@ -40,7 +40,7 @@ class ContributionRepository:
             ContributionMember.user_id == user_id,
             ContributionMember.status == MemberStatus.ACTIVE,
         )
-        conditions = [or_(Contribution.id.in_(member_ids), Contribution.created_by == user_id)]
+        conditions = [Contribution.id.in_(member_ids)]
 
         base = select(Contribution).options(selectinload(Contribution.members))
         count_q = select(func.count(Contribution.id))
