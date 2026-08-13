@@ -50,6 +50,7 @@ class SavingsGoalUpdate(BaseModel):
 class FundSavingsRequest(BaseModel):
     amount: int = Field(gt=0)
     note: str | None = Field(default=None, max_length=200)
+    goal_id: uuid.UUID | None = Field(default=None)
 
 
 class SavingsAccountDetail(SavingsAccountOut):

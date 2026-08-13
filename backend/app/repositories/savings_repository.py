@@ -3,6 +3,7 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.models.enums import SavingsGoalStatus
 from app.models.savings_account import SavingsAccount
 from app.models.savings_goal import SavingsGoal
 
@@ -38,6 +39,17 @@ class SavingsGoalRepository:
 
     def get(self, db: Session, goal_id: uuid.UUID) -> SavingsGoal | None:
         return db.get(SavingsGoal, goal_id)
+
+    def get_for_account(self, db: Session, goal_id: uuid.UUID, account_id: uuid.UUID) -> SavingsGoal | None:
+        return db.execute(
+            select(SavingsGoal).where(SavingsGoal.id == goal_id, SavingsGoal.account_id == account_id)
+        ).scalar_one_or_none()
+
+    def add_contribution(self, db: Session, goal: SavingsGoal, amount: int) -> None:
+        goal.current += amount
+        if goal.target > 0 and goal.current >= goal.target:
+            goal.status = SavingsGoalStatus.COMPLETED
+        db.flush()
 
     def list_for_account(self, db: Session, account_id: uuid.UUID) -> list[SavingsGoal]:
         return list(

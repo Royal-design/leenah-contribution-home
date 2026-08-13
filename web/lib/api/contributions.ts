@@ -56,9 +56,9 @@ export async function apiGetOpenContributions(params?: {
 }): Promise<Paginated<Contribution>> {
   const { data } = await api.get<ListPayload<RawContribution>>("/api/contributions/open", {
     page: params?.page,
-    page_size: params?.pageSize,
+    page_size: params?.pageSize ?? 10,
   })
-  return toPaginated(data.items.map(mapContribution), data, params?.pageSize ?? 20)
+  return toPaginated(data.items.map(mapContribution), data, params?.pageSize ?? 10)
 }
 
 export async function apiGetContribution(id: string): Promise<Contribution> {

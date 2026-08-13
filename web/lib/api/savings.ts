@@ -28,6 +28,7 @@ export async function apiGetSavings(): Promise<SavingsAccount> {
 export async function apiFundSavings(payload: FundSavingsPayload): Promise<void> {
   await api.post("/api/savings/fund", {
     amount: payload.amount,
+    goal_id: payload.goalId,
     note: payload.method ? `Funded via ${payload.method}` : undefined,
   })
 }

@@ -11,15 +11,19 @@ import { Separator } from "@/components/ui/separator"
 import { PageHeader } from "@/components/shared/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
+import { Pagination } from "@/components/ui/pagination"
 import { formatDate, formatNaira } from "@/lib/format"
 import { useOpenContributions, useJoinContribution } from "@/hooks/queries/use-contributions"
 import { cn } from "@/lib/utils"
 import type { Contribution } from "@/types"
 
+const PAGE_SIZE = 10
+
 export default function JoinContributionPage() {
   const router = useRouter()
   const joinContribution = useJoinContribution()
-  const openContributions = useOpenContributions({ page: 1, pageSize: 50 })
+  const [page, setPage] = React.useState(1)
+  const openContributions = useOpenContributions({ page, pageSize: PAGE_SIZE })
 
   const plans = openContributions.data?.items ?? []
   const [planId, setPlanId] = React.useState<string>("")
@@ -97,6 +101,18 @@ export default function JoinContributionPage() {
                   })}
                 </div>
               )}
+
+              <Pagination
+                page={openContributions.data?.page ?? 1}
+                totalPages={openContributions.data?.totalPages ?? 1}
+                onPageChange={(next) => {
+                  if (next !== page) {
+                    setPlanId("")
+                    setPage(next)
+                  }
+                }}
+                className="mt-2"
+              />
             </CardContent>
           </Card>
 

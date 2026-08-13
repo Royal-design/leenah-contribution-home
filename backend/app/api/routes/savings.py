@@ -33,7 +33,14 @@ def fund_savings(
     db: Session = Depends(get_db),
 ):
     ip = request.client.host if request.client else None
-    data = savings_service.fund(db, user=user, amount=payload.amount, note=payload.note, ip_address=ip)
+    data = savings_service.fund(
+        db,
+        user=user,
+        amount=payload.amount,
+        note=payload.note,
+        ip_address=ip,
+        goal_id=payload.goal_id,
+    )
     return SuccessResponse(message="Savings funded.", data=data)
 
 

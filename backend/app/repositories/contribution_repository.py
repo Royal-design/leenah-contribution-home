@@ -2,7 +2,7 @@ from datetime import datetime
 import uuid
 
 from sqlalchemy import and_, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.contribution import Contribution
 from app.models.contribution_member import ContributionMember
@@ -39,7 +39,7 @@ class ContributionRepository:
         member_ids = select(ContributionMember.contribution_id).where(ContributionMember.user_id == user_id)
         conditions = [or_(Contribution.id.in_(member_ids), Contribution.created_by == user_id)]
 
-        base = select(Contribution)
+        base = select(Contribution).options(selectinload(Contribution.members))
         count_q = select(func.count(Contribution.id))
         for c in conditions:
             base = base.where(c)
@@ -57,7 +57,7 @@ class ContributionRepository:
 
     def list_open(self, db: Session, *, page: int = 1, page_size: int = 20) -> tuple[list[Contribution], int]:
         conditions = [Contribution.is_open.is_(True), Contribution.status == ContributionStatus.UPCOMING]
-        base = select(Contribution)
+        base = select(Contribution).options(selectinload(Contribution.members))
         count_q = select(func.count(Contribution.id))
         for c in conditions:
             base = base.where(c)
@@ -90,7 +90,7 @@ class ContributionRepository:
                 )
             )
 
-        base = select(Contribution)
+        base = select(Contribution).options(selectinload(Contribution.members))
         count_q = select(func.count(Contribution.id))
         for c in conditions:
             base = base.where(c)

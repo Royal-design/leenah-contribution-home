@@ -2,23 +2,32 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
-import { ChevronLeft, Target, Plus } from "lucide-react"
+import { useRouter, useParams } from "next/navigation"
+import { ChevronLeft, Target, Plus, Pencil, Trash2 } from "lucide-react"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { SavingsGoalProgress } from "@/components/contributions/contribution-progress"
 import { FundingDialog } from "@/components/forms/funding-dialog"
-import { useSavings } from "@/hooks/queries/use-savings"
+import { EditGoalDialog } from "@/components/forms/edit-goal-dialog"
+import {
+  useSavings,
+  useDeleteSavingsGoal,
+} from "@/hooks/queries/use-savings"
 import { formatDate, formatMonthYear, formatNaira } from "@/lib/format"
 
 export default function SavingsDetailPage() {
+  const router = useRouter()
   const params = useParams<{ id: string }>()
   const id = params.id
   const savings = useSavings()
+  const deleteGoal = useDeleteSavingsGoal()
   const [fundOpen, setFundOpen] = React.useState(false)
+  const [editOpen, setEditOpen] = React.useState(false)
+  const [confirmDelete, setConfirmDelete] = React.useState(false)
 
   if (savings.isPending) {
     return (
@@ -65,12 +74,27 @@ export default function SavingsDetailPage() {
             : "Keep saving to reach your target."
         }
       >
-        {goal.status !== "completed" && (
-          <Button size="sm" onClick={() => setFundOpen(true)}>
-            <Plus />
-            Add to {goal.name}
+        <div className="flex items-center gap-2">
+          {goal.status !== "completed" && (
+            <Button size="sm" onClick={() => setFundOpen(true)}>
+              <Plus />
+              Add to {goal.name}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil />
+            Edit
           </Button>
-        )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 />
+            Delete
+          </Button>
+        </div>
       </PageHeader>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -132,6 +156,27 @@ export default function SavingsDetailPage() {
         open={fundOpen}
         onOpenChange={setFundOpen}
         goalId={goal.id}
+      />
+
+      <EditGoalDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        goal={goal}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete savings goal?"
+        description={`Delete "${goal.name}"? Your saved balance is not affected.`}
+        confirmLabel="Delete"
+        destructive
+        loading={deleteGoal.isPending}
+        onConfirm={() => {
+          deleteGoal.mutate(goal.id, {
+            onSuccess: () => router.push("/savings"),
+          })
+        }}
       />
     </div>
   )

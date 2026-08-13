@@ -27,7 +27,16 @@ class SavingsService:
         data.goals = [SavingsGoalOut.model_validate(goal) for goal in goals]
         return data
 
-    def fund(self, db: Session, *, user: User, amount: int, note: str | None, ip_address: str | None = None) -> SavingsAccountDetail:
+    def fund(
+        self,
+        db: Session,
+        *,
+        user: User,
+        amount: int,
+        note: str | None,
+        ip_address: str | None = None,
+        goal_id: uuid.UUID | None = None,
+    ) -> SavingsAccountDetail:
         transaction = wallet_service.credit(
             db,
             user_id=user.id,
@@ -35,6 +44,15 @@ class SavingsService:
             description=note or "Savings top-up",
             details={"method": "wallet", "channel": "savings"},
         )
+
+        account = self._get_account(db, user)
+        goal_name = None
+        if goal_id is not None:
+            goal = savings_goal_repository.get_for_account(db, goal_id, account.id)
+            if goal is None:
+                raise AppException(message="Savings goal not found.", status_code=404, error_code="GOAL_NOT_FOUND")
+            savings_goal_repository.add_contribution(db, goal, amount)
+            goal_name = goal.name
 
         audit_log_repository.create(
             db,
@@ -44,8 +62,8 @@ class SavingsService:
             actor_role=user.role,
             action=AuditAction.CREATE,
             category=AuditCategory.SAVINGS,
-            description=f"Funded savings account with {amount}.",
-            details={"transaction_id": str(transaction.id)},
+            description=f"Funded savings account with {amount}." + (f" Allocated to goal '{goal_name}'." if goal_name else ""),
+            details={"transaction_id": str(transaction.id), "goal_id": str(goal_id) if goal_id else None},
             ip_address=ip_address,
         )
 

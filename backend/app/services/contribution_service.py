@@ -48,6 +48,31 @@ def _utcnow() -> datetime:
 
 
 class ContributionService:
+    def _base_fields(self, contribution: Contribution) -> dict:
+        return {
+            "id": contribution.id,
+            "name": contribution.name,
+            "description": contribution.description,
+            "organization": contribution.organization,
+            "amount": contribution.amount,
+            "frequency": contribution.frequency,
+            "member_count": contribution.member_count,
+            "rounds": contribution.rounds,
+            "start_date": contribution.start_date,
+            "end_date": contribution.end_date,
+            "withdrawal_date": contribution.withdrawal_date,
+            "next_payment_date": contribution.next_payment_date,
+            "last_payment_date": contribution.last_payment_date,
+            "total_contributed": contribution.total_contributed,
+            "total_expected": contribution.total_expected,
+            "progress": contribution.progress,
+            "status": contribution.status,
+            "withdrawal_rule": contribution.withdrawal_rule,
+            "is_open": contribution.is_open,
+            "created_by": contribution.created_by,
+            "created_at": contribution.created_at,
+        }
+
     def _build_out(self, contribution: Contribution, *, member_id: uuid.UUID | None = None) -> ContributionOut:
         members_in = [m for m in contribution.members if m.status == MemberStatus.ACTIVE]
 
@@ -59,31 +84,39 @@ class ContributionService:
             payouts_in = list(contribution.payouts)
 
         return ContributionOut(
-            id=contribution.id,
-            name=contribution.name,
-            description=contribution.description,
-            organization=contribution.organization,
-            amount=contribution.amount,
-            frequency=contribution.frequency,
-            member_count=contribution.member_count,
-            rounds=contribution.rounds,
-            start_date=contribution.start_date,
-            end_date=contribution.end_date,
-            withdrawal_date=contribution.withdrawal_date,
-            next_payment_date=contribution.next_payment_date,
-            last_payment_date=contribution.last_payment_date,
-            total_contributed=contribution.total_contributed,
-            total_expected=contribution.total_expected,
-            progress=contribution.progress,
-            status=contribution.status,
-            withdrawal_rule=contribution.withdrawal_rule,
-            is_open=contribution.is_open,
-            created_by=contribution.created_by,
-            created_at=contribution.created_at,
+            **self._base_fields(contribution),
             members=[ContributionMemberOut.model_validate(m) for m in members_in],
             schedule=[ContributionScheduleOut.model_validate(s) for s in schedule_in],
             payouts=[ContributionPayoutOut.model_validate(p) for p in payouts_in],
         )
+
+    def _build_list_out(self, contribution: Contribution) -> ContributionOut:
+        """Lightweight list item: summary fields + active members only.
+
+        List endpoints skip the per-member schedules/payouts so they stay fast
+        and small; detail endpoints keep the full serialization.
+        """
+        members_in = [m for m in contribution.members if m.status == MemberStatus.ACTIVE]
+        return ContributionOut(
+            **self._base_fields(contribution),
+            members=[ContributionMemberOut.model_validate(m) for m in members_in],
+            schedule=[],
+            payouts=[],
+        )
+
+    @staticmethod
+    def _paginated(*, total: int, page: int, page_size: int) -> dict:
+        pages = (total + page_size - 1) // page_size if total else 0
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": pages,
+            "has_next": page < pages,
+            "has_prev": page > 1,
+            "next": page + 1 if page < pages else None,
+            "prev": page - 1 if page > 1 else None,
+        }
 
     def _compute_dates(self, start_date: datetime, frequency: str, rounds: int) -> list[datetime]:
         step = timedelta(days=FREQUENCY_DAYS.get(frequency, 30))
@@ -203,41 +236,23 @@ class ContributionService:
 
     def list_mine(self, db: Session, *, user: User, status=None, page: int = 1, page_size: int = 20):
         items, total = contribution_repository.list_mine(db, user.id, status=status, page=page, page_size=page_size)
-        results = []
-        for item in items:
-            self._sync_schedule(db, item)
-            member_id = self._member_id_for(db, item.id, user.id)
-            results.append(self._build_out(item, member_id=member_id))
         return {
-            "items": results,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "pages": (total + page_size - 1) // page_size if total else 0,
+            "items": [self._build_list_out(item) for item in items],
+            **self._paginated(total=total, page=page, page_size=page_size),
         }
 
     def list_open(self, db: Session, *, page: int = 1, page_size: int = 20):
         items, total = contribution_repository.list_open(db, page=page, page_size=page_size)
-        for item in items:
-            self._sync_schedule(db, item)
         return {
-            "items": [self._build_out(item) for item in items],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "pages": (total + page_size - 1) // page_size if total else 0,
+            "items": [self._build_list_out(item) for item in items],
+            **self._paginated(total=total, page=page, page_size=page_size),
         }
 
     def list_all(self, db: Session, *, status=None, search: str | None = None, page: int = 1, page_size: int = 20):
         items, total = contribution_repository.list_all(db, status=status, search=search, page=page, page_size=page_size)
-        for item in items:
-            self._sync_schedule(db, item)
         return {
-            "items": [self._build_out(item) for item in items],
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "pages": (total + page_size - 1) // page_size if total else 0,
+            "items": [self._build_list_out(item) for item in items],
+            **self._paginated(total=total, page=page, page_size=page_size),
         }
 
     def _get_owned(self, db: Session, *, user: User, contribution_id: uuid.UUID) -> Contribution:
