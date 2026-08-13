@@ -5,14 +5,22 @@ import { usePathname } from "next/navigation"
 import { Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { mobilePrimaryNav } from "@/components/navigation/config"
+import {
+  adminMobilePrimaryNav,
+  mobilePrimaryNav,
+} from "@/components/navigation/config"
 
 export function MobileBottomNav({
+  isAdmin = false,
   onCenterAction,
 }: {
+  isAdmin?: boolean
   onCenterAction: () => void
 }) {
   const pathname = usePathname()
+
+  const navItems =
+    isAdmin ? adminMobilePrimaryNav : mobilePrimaryNav
 
   return (
     <nav
@@ -21,7 +29,7 @@ export function MobileBottomNav({
     >
       <div className="relative mx-auto max-w-md rounded-2xl border bg-popover/95 px-3 pt-3 pb-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.18)] backdrop-blur supports-[backdrop-filter]:bg-popover/85">
         <div className="grid grid-cols-5 items-end">
-          {mobilePrimaryNav.slice(0, 2).map((item) => {
+          {navItems.slice(0, 2).map((item) => {
             const Icon = item.icon
             const active =
               pathname === item.href || pathname.startsWith(`${item.href}/`)
@@ -59,7 +67,7 @@ export function MobileBottomNav({
             </span>
           </button>
 
-          {mobilePrimaryNav.slice(2).map((item) => {
+          {navItems.slice(2).map((item) => {
             const Icon = item.icon
             const active =
               pathname === item.href || pathname.startsWith(`${item.href}/`)

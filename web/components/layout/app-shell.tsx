@@ -59,7 +59,10 @@ export function AppShell({
       </div>
 
       <div className="lg:hidden">
-        <MobileBottomNav onCenterAction={() => setFundingOpen(true)} />
+        <MobileBottomNav
+          isAdmin={isAdmin}
+          onCenterAction={() => setFundingOpen(true)}
+        />
       </div>
 
       <FundingDialog

@@ -72,3 +72,14 @@ export const mobilePrimaryNav: Array<{
   { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
   { label: "Profile", href: "/profile", icon: User },
 ]
+
+export const adminMobilePrimaryNav: Array<{
+  label: string
+  href: string
+  icon: LucideIcon
+}> = [
+  { label: "Overview", href: "/admin/dashboard", icon: LayoutDashboard },
+  { label: "Users", href: "/admin/users", icon: User },
+  { label: "Transactions", href: "/admin/transactions", icon: ArrowLeftRight },
+  { label: "Settings", href: "/admin/settings", icon: Settings },
+]
