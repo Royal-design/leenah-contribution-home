@@ -2,27 +2,32 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
-import { ChevronLeft, Wallet, CircleCheck, Circle } from "lucide-react"
+import { useParams, useRouter } from "next/navigation"
+import { ChevronLeft, Wallet, CircleCheck, Circle, LogOut, UserPlus } from "lucide-react"
 
 import { StatusBadge } from "@/components/shared/status-badge"
 import { ContributionProgress } from "@/components/contributions/contribution-progress"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FundContributionDialog } from "@/components/forms/fund-contribution-dialog"
-import { useContribution } from "@/hooks/queries/use-contributions"
+import { useContribution, useJoinContribution, useLeaveContribution } from "@/hooks/queries/use-contributions"
 import { useAuthStore } from "@/stores/auth-store"
 import { formatDate, formatLongDate, formatNaira, getInitials } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 export default function ContributionDetailPage() {
+  const router = useRouter()
   const params = useParams<{ id: string }>()
   const id = params.id
   const { data: contribution, isPending, isError } = useContribution(id)
+  const joinContribution = useJoinContribution()
+  const leaveContribution = useLeaveContribution()
   const currentUserId = useAuthStore((state) => state.user?.id)
   const [fundOpen, setFundOpen] = React.useState(false)
+  const [leaveOpen, setLeaveOpen] = React.useState(false)
 
   if (isPending) {
     return (
@@ -76,10 +81,34 @@ export default function ContributionDetailPage() {
           <p className="mt-1 text-sm text-muted-foreground">{contribution.description}</p>
         </div>
         <div className="flex items-center gap-2">
-          {!withdrawalAvailable && contribution.status === "active" && (
+          {!currentMember && contribution.isOpen && contribution.status !== "completed" && (
+            <Button
+              onClick={() =>
+                joinContribution.mutate(contribution.id, {
+                  onSuccess: () => router.push("/contributions"),
+                })
+              }
+              disabled={joinContribution.isPending}
+            >
+              <UserPlus />
+              {joinContribution.isPending ? "Joining…" : "Join"}
+            </Button>
+          )}
+          {!withdrawalAvailable && contribution.status === "active" && currentMember && (
             <Button onClick={() => setFundOpen(true)}>
               <Wallet />
               Pay contribution
+            </Button>
+          )}
+          {currentMember && contribution.status !== "completed" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setLeaveOpen(true)}
+            >
+              <LogOut />
+              Leave
             </Button>
           )}
         </div>
@@ -275,6 +304,21 @@ export default function ContributionDetailPage() {
         open={fundOpen}
         onOpenChange={setFundOpen}
         contribution={contribution}
+      />
+
+      <ConfirmDialog
+        open={leaveOpen}
+        onOpenChange={setLeaveOpen}
+        title="Leave this contribution?"
+        description="You'll stop participating and your spot frees up. Your payment history is preserved."
+        confirmLabel="Leave contribution"
+        destructive
+        loading={leaveContribution.isPending}
+        onConfirm={() => {
+          leaveContribution.mutate(contribution.id, {
+            onSuccess: () => router.push("/contributions"),
+          })
+        }}
       />
     </div>
   )

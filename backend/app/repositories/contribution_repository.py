@@ -59,7 +59,10 @@ class ContributionRepository:
         return items, total
 
     def list_open(self, db: Session, *, page: int = 1, page_size: int = 20) -> tuple[list[Contribution], int]:
-        conditions = [Contribution.is_open.is_(True), Contribution.status == ContributionStatus.UPCOMING]
+        conditions = [
+            Contribution.is_open.is_(True),
+            Contribution.status.in_([ContributionStatus.UPCOMING, ContributionStatus.ACTIVE]),
+        ]
         base = select(Contribution).options(selectinload(Contribution.members))
         count_q = select(func.count(Contribution.id))
         for c in conditions:
