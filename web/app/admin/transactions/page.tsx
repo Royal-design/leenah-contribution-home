@@ -9,12 +9,31 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Pagination } from "@/components/ui/pagination"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
-import { useAdminTransactions } from "@/hooks/queries/use-admin"
-import { useRevertTransaction } from "@/hooks/queries/use-admin"
+import {
+  useAdminDeleteTransaction,
+  useAdminTransactions,
+  useRevertTransaction,
+} from "@/hooks/queries/use-admin"
 import { formatNaira } from "@/lib/format"
 import type { Transaction, TransactionStatus, TransactionType } from "@/types"
 
 const PAGE_SIZE = 10
+
+const typeLabels: Record<string, string> = {
+  all: "All types",
+  contribution: "Contribution",
+  savings: "Savings",
+  funding: "Funding",
+  withdrawal: "Withdrawal",
+}
+
+const statusLabels: Record<string, string> = {
+  all: "All statuses",
+  successful: "Successful",
+  pending: "Pending",
+  failed: "Failed",
+  reverted: "Reverted",
+}
 
 export default function AdminTransactionsPage() {
   const [page, setPage] = React.useState(1)
@@ -28,7 +47,9 @@ export default function AdminTransactionsPage() {
     status: status === "all" ? undefined : status,
   })
   const revertTransaction = useRevertTransaction()
+  const deleteTransaction = useAdminDeleteTransaction()
   const [pendingRevert, setPendingRevert] = React.useState<Transaction | null>(null)
+  const [pendingDelete, setPendingDelete] = React.useState<Transaction | null>(null)
 
   const items = data?.items ?? []
 
@@ -45,7 +66,9 @@ export default function AdminTransactionsPage() {
             setPage(1)
           }}>
           <SelectTrigger className="w-full sm:w-40" aria-label="Filter by type">
-            <SelectValue placeholder="All types" />
+            <SelectValue>
+              {(value) => typeLabels[(value as string) ?? "all"] ?? "All types"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
@@ -60,7 +83,9 @@ export default function AdminTransactionsPage() {
             setPage(1)
           }}>
           <SelectTrigger className="w-full sm:w-44" aria-label="Filter by status">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue>
+              {(value) => statusLabels[(value as string) ?? "all"] ?? "All statuses"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
@@ -82,7 +107,11 @@ export default function AdminTransactionsPage() {
         <>
           <div className="hidden overflow-hidden rounded-xl bg-card shadow-sm md:block">
             <div className="overflow-x-auto">
-              <TransactionTable transactions={items} onRevert={setPendingRevert} />
+              <TransactionTable
+                transactions={items}
+                onRevert={setPendingRevert}
+                onDelete={setPendingDelete}
+              />
             </div>
           </div>
           <div className="rounded-xl bg-card shadow-sm md:hidden">
@@ -115,6 +144,26 @@ export default function AdminTransactionsPage() {
           if (!pendingRevert) return
           revertTransaction.mutate(pendingRevert.id)
           setPendingRevert(null)
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Delete transaction?"
+        description={
+          pendingDelete
+            ? `Delete the ${pendingDelete.status} ${formatNaira(pendingDelete.amount)} transaction (${pendingDelete.reference})? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={deleteTransaction.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return
+          deleteTransaction.mutate(pendingDelete.id, {
+            onSuccess: () => setPendingDelete(null),
+          })
         }}
       />
     </div>

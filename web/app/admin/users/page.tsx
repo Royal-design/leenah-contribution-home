@@ -1,33 +1,60 @@
 "use client"
 
-import * as React from "react"
-import { Eye, Trash2, UserX, UserCheck, UserPlus, Upload, Search } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
+import {
+  Search,
+  Trash2,
+  Upload,
+  UserCheck,
+  UserPlus,
+  UserX,
+} from "lucide-react"
+import * as React from "react"
 
+import { BulkUploadDialog } from "@/components/forms/bulk-upload-dialog"
+import { InviteUserDialog } from "@/components/forms/invite-user-dialog"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { PageHeader } from "@/components/shared/page-header"
-import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { DataTable } from "@/components/ui/data-table"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
-import { DataTable } from "@/components/ui/data-table"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ConfirmDialog } from "@/components/shared/confirm-dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { InviteUserDialog } from "@/components/forms/invite-user-dialog"
-import { BulkUploadDialog } from "@/components/forms/bulk-upload-dialog"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   useAdminUsers,
   useDeleteUser,
-  useSetUserRole,
+  useSetUserRoles,
   useSetUserStatus,
 } from "@/hooks/queries/use-admin"
-import { useAuthStore } from "@/stores/auth-store"
 import { formatDate, getInitials } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { useAuthStore } from "@/stores/auth-store"
 import type { Role, User } from "@/types"
 
 const PAGE_SIZE = 10
+
+function userRoles(user: User): Role[] {
+  if (user.roles?.length) {
+    return user.roles as Role[]
+  }
+  return user.role === "admin" ? ["admin", "user"] : ["user"]
+}
+
+function RoleLabel({ roles }: { roles: Role[] }) {
+  const sorted = roles
+    .slice()
+    .sort((a, b) => (a === "admin" ? -1 : 1))
+    .map((role) => (role === "admin" ? "Admin" : "User"))
+  return <span className="capitalize">{sorted.join(" · ")}</span>
+}
 
 export default function AdminUsersPage() {
   const [page, setPage] = React.useState(1)
@@ -48,7 +75,7 @@ export default function AdminUsersPage() {
     search: debouncedSearch || undefined,
   })
   const setUserStatus = useSetUserStatus()
-  const setUserRole = useSetUserRole()
+  const setUserRoles = useSetUserRoles()
   const deleteUser = useDeleteUser()
   const currentUserId = useAuthStore((state) => state.user?.id)
   const [inviteOpen, setInviteOpen] = React.useState(false)
@@ -94,25 +121,51 @@ export default function AdminUsersPage() {
     {
       id: "role",
       header: "Role",
-      cell: ({ row }) => (
-        <Select
-          value={row.original.role}
-          onValueChange={(value) =>
-            setUserRole.mutate({
-              userId: row.original.id,
-              role: value as Role,
-            })
-          }
-        >
-          <SelectTrigger size="sm" aria-label={`Change role for ${row.original.firstName}`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="user">User</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-          </SelectContent>
-        </Select>
-      ),
+      cell: ({ row }) => {
+        const user = row.original
+        const roles = userRoles(user)
+        const isAdmin = roles.includes("admin")
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={`Change roles for ${user.firstName}`}
+                  className="flex items-center gap-1.5 rounded-lg border border-input bg-transparent py-2 pr-2.5 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50"
+                >
+                  <RoleLabel roles={roles} />
+                </button>
+              }
+            />
+            <DropdownMenuContent align="start">
+              <DropdownMenuCheckboxItem checked disabled>
+                User
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={isAdmin}
+                onCheckedChange={(checked) =>
+                  setUserRoles.mutate(
+                    {
+                      userId: user.id,
+                      roles: checked ? ["admin", "user"] : ["user"],
+                    },
+                    {
+                      onSuccess: (updated) => {
+                        if (user.id === currentUserId) {
+                          useAuthStore.getState().setUser(updated)
+                        }
+                      },
+                    }
+                  )
+                }
+              >
+                Admin
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
     },
     {
       accessorKey: "joinedAt",
@@ -159,15 +212,16 @@ export default function AdminUsersPage() {
         const allowManage = user.id !== currentUserId
         return (
           <div className="flex items-center justify-end gap-1">
-            <Button
+            {/* <Button
               variant="ghost"
               size="icon-sm"
               aria-label={`View ${user.firstName}`}
             >
               <Eye />
-            </Button>
-            {user.status !== "invited" && allowManage && (
-              user.status === "active" ? (
+            </Button> */}
+            {user.status !== "invited" &&
+              allowManage &&
+              (user.status === "active" ? (
                 <Button
                   variant="ghost"
                   size="icon-sm"
@@ -197,8 +251,7 @@ export default function AdminUsersPage() {
                 >
                   <UserCheck className="text-success" />
                 </Button>
-              )
-            )}
+              ))}
             {allowManage && (
               <Button
                 variant="ghost"
@@ -299,8 +352,8 @@ export default function AdminUsersPage() {
                   </div>
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground capitalize">
-                        {original.role}
+                      <span className="text-muted-foreground">
+                        <RoleLabel roles={userRoles(original)} />
                       </span>
                       <span className="text-muted-foreground">·</span>
                       <span className="text-muted-foreground">
@@ -309,8 +362,8 @@ export default function AdminUsersPage() {
                     </div>
                     {original.id !== currentUserId && (
                       <div className="flex items-center gap-1">
-                        {original.status !== "invited" && (
-                          original.status === "active" ? (
+                        {original.status !== "invited" &&
+                          (original.status === "active" ? (
                             <Button
                               variant="ghost"
                               size="icon-sm"
@@ -340,8 +393,7 @@ export default function AdminUsersPage() {
                             >
                               <UserCheck className="text-success" />
                             </Button>
-                          )
-                        )}
+                          ))}
                         <Button
                           variant="ghost"
                           size="icon-sm"

@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Plus, Search } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Plus, Search, Pencil, Eye, Trash2 } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
@@ -12,16 +13,19 @@ import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
 import { DataTable } from "@/components/ui/data-table"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { useAdminContributions } from "@/hooks/queries/use-admin"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { useAdminContributions, useAdminDeleteContribution } from "@/hooks/queries/use-admin"
 import { formatDate, formatNaira } from "@/lib/format"
 import type { Contribution } from "@/types"
 
 const PAGE_SIZE = 10
 
 export default function AdminContributionsPage() {
+  const router = useRouter()
   const [page, setPage] = React.useState(1)
   const [search, setSearch] = React.useState("")
   const [debouncedSearch, setDebouncedSearch] = React.useState("")
+  const [pendingDelete, setPendingDelete] = React.useState<Contribution | null>(null)
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -36,6 +40,7 @@ export default function AdminContributionsPage() {
     pageSize: PAGE_SIZE,
     search: debouncedSearch || undefined,
   })
+  const deleteContribution = useAdminDeleteContribution()
 
   const items = data?.items ?? []
 
@@ -71,7 +76,7 @@ export default function AdminContributionsPage() {
     {
       accessorKey: "memberCount",
       header: "Members",
-      cell: ({ row }) => <span>{row.original.memberCount}</span>,
+      cell: ({ row }) => <span>{row.original.members.length}</span>,
     },
     {
       accessorKey: "startDate",
@@ -97,6 +102,39 @@ export default function AdminContributionsPage() {
             ? formatDate(row.original.withdrawalDate)
             : "—"}
         </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      meta: { align: "right" },
+      cell: ({ row }) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`View ${row.original.name}`}
+            render={<Link href={`/admin/contributions/${row.original.id}`} />}
+          >
+            <Eye />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Edit ${row.original.name}`}
+            render={<Link href={`/admin/contributions/${row.original.id}/edit`} />}
+          >
+            <Pencil />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Delete ${row.original.name}`}
+            onClick={() => setPendingDelete(row.original)}
+          >
+            <Trash2 className="text-destructive" />
+          </Button>
+        </div>
       ),
     },
   ]
@@ -188,6 +226,29 @@ export default function AdminContributionsPage() {
           />
         </>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Delete contribution?"
+        description={
+          pendingDelete
+            ? `Delete "${pendingDelete.name}"? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={deleteContribution.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return
+          deleteContribution.mutate(pendingDelete.id, {
+            onSuccess: () => {
+              setPendingDelete(null)
+              router.push("/admin/contributions")
+            },
+          })
+        }}
+      />
     </div>
   )
 }

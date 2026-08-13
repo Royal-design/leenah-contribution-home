@@ -71,5 +71,35 @@ class TransactionService:
         )
         return transaction
 
+    def delete(self, db: Session, *, actor: User, transaction_id: uuid.UUID) -> None:
+        transaction = transaction_repository.get(db, transaction_id)
+        if transaction is None:
+            raise AppException(message="Transaction not found.", status_code=404, error_code="TRANSACTION_NOT_FOUND")
+        if transaction.status not in (TransactionStatus.PENDING, TransactionStatus.FAILED):
+            raise AppException(
+                message="Only pending or failed transactions can be deleted.",
+                status_code=400,
+                error_code="CANNOT_DELETE",
+            )
+
+        reference = transaction.reference
+        details = {"type": transaction.type.value, "amount": transaction.amount, "status": transaction.status.value}
+
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=actor.role,
+            action=AuditAction.DELETE,
+            category=AuditCategory.TRANSACTION,
+            description=f"Deleted {transaction.type} transaction {reference}.",
+            target=reference,
+            target_id=transaction.id,
+            details=details,
+        )
+        db.delete(transaction)
+        db.flush()
+
 
 transaction_service = TransactionService()

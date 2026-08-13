@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -6,9 +9,17 @@ from app.api.router import includes_api_routes
 from app.core.app_exception_handler import app_exception_handler
 from app.core.config import settings
 from app.core.exceptions import AppException
+from app.core.realtime import set_event_loop
 import app.models  # noqa: F401 - register all models
 
-app = FastAPI(title="LCH API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    set_event_loop(asyncio.get_running_loop())
+    yield
+
+
+app = FastAPI(title="LCH API", version="0.1.0", lifespan=lifespan)
 
 allowed_origins = {
     settings.frontend_url.rstrip("/"),

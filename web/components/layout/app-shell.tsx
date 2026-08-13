@@ -7,9 +7,11 @@ import { DesktopSidebar } from "@/components/navigation/desktop-sidebar"
 import { MobileBottomNav } from "@/components/navigation/mobile-bottom-nav"
 import { TopHeader } from "@/components/navigation/top-header"
 import { FundingDialog } from "@/components/forms/funding-dialog"
+import { NotificationsListener } from "@/components/notifications/notifications-listener"
 import { PageSkeleton } from "@/components/shared/skeletons"
 import { adminNavGroups, userNavGroups } from "@/components/navigation/config"
 import { useAuthStore } from "@/stores/auth-store"
+import { isAdmin as hasAdminAccess } from "@/lib/roles"
 
 export function AppShell({
   children,
@@ -35,7 +37,7 @@ export function AppShell({
       return
     }
 
-    if (isAdmin && user.role !== "admin") {
+    if (isAdmin && !hasAdminAccess(user)) {
       router.replace("/dashboard")
     }
   }, [user, status, isAdmin, router])
@@ -48,12 +50,13 @@ export function AppShell({
     return null
   }
 
-  if (isAdmin && user.role !== "admin") {
+  if (isAdmin && !hasAdminAccess(user)) {
     return null
   }
 
   return (
     <div className="min-h-svh bg-muted/30">
+      <NotificationsListener />
       <DesktopSidebar navGroups={navGroups} />
 
       <div className="lg:pl-64">

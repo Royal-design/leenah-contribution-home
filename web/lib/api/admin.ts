@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/http"
+import { type UpdateContributionPayload } from "@/lib/api/contributions"
 import {
   mapAdminStats,
   mapContribution,
@@ -136,6 +137,11 @@ export async function apiSetUserRole(userId: string, role: Role): Promise<User> 
   return mapUser(data)
 }
 
+export async function apiSetUserRoles(userId: string, roles: Role[]): Promise<User> {
+  const { data } = await api.patch<RawUser>(`/api/admin/users/${userId}/roles`, { roles })
+  return mapUser(data)
+}
+
 export async function apiSetUserStatus(userId: string, status: UserStatus): Promise<User> {
   const { data } = await api.patch<RawUser>(`/api/admin/users/${userId}/status`, { status })
   return mapUser(data)
@@ -153,6 +159,7 @@ export async function apiAdminCreateContribution(payload: {
   memberCount: number
   rounds?: number
   startDate: string
+  endDate?: string
   withdrawalDate?: string
 }): Promise<Contribution> {
   const { data } = await api.post<RawContribution>("/api/admin/contributions", {
@@ -163,6 +170,7 @@ export async function apiAdminCreateContribution(payload: {
     member_count: payload.memberCount,
     rounds: payload.rounds ?? 12,
     start_date: payload.startDate,
+    end_date: payload.endDate,
     withdrawal_rule: payload.withdrawalDate ? "fixed_date" : undefined,
     fixed_withdrawal_date: payload.withdrawalDate,
   })
@@ -181,6 +189,57 @@ export async function apiAdminListContributions(params?: {
     search: params?.search,
   })
   return toPaginated(data.items.map(mapContribution), data, pageSize)
+}
+
+export async function apiAdminGetContribution(id: string): Promise<Contribution> {
+  const { data } = await api.get<RawContribution>(`/api/admin/contributions/${id}`)
+  return mapContribution(data)
+}
+
+export async function apiAdminUpdateContribution(
+  id: string,
+  payload: UpdateContributionPayload
+): Promise<Contribution> {
+  const { data } = await api.patch<RawContribution>(`/api/admin/contributions/${id}`, {
+    name: payload.name,
+    description: payload.description,
+    organization: payload.organization,
+    amount: payload.amount,
+    frequency: payload.frequency,
+    member_count: payload.memberCount,
+    rounds: payload.rounds,
+    start_date: payload.startDate,
+    end_date: payload.endDate,
+    withdrawal_date: payload.withdrawalDate,
+    status: payload.status,
+    is_open: payload.isOpen,
+  })
+  return mapContribution(data)
+}
+
+export async function apiAdminDeleteContribution(id: string): Promise<void> {
+  await api.delete(`/api/admin/contributions/${id}`)
+}
+
+export async function apiAdminAddContributionMember(
+  contributionId: string,
+  userId: string
+): Promise<Contribution> {
+  const { data } = await api.post<RawContribution>(
+    `/api/admin/contributions/${contributionId}/members`,
+    { user_id: userId }
+  )
+  return mapContribution(data)
+}
+
+export async function apiAdminRemoveContributionMember(
+  contributionId: string,
+  userId: string
+): Promise<Contribution> {
+  const { data } = await api.delete<RawContribution>(
+    `/api/admin/contributions/${contributionId}/members/${userId}`
+  )
+  return mapContribution(data)
 }
 
 export async function apiAdminListTransactions(params?: {
@@ -206,6 +265,10 @@ export async function apiRevertTransaction(transactionId: string): Promise<Trans
   return mapTransaction(data)
 }
 
+export async function apiAdminDeleteTransaction(transactionId: string): Promise<void> {
+  await api.delete(`/api/admin/transactions/${transactionId}`)
+}
+
 export async function apiAdminListWithdrawals(params?: {
   page?: number
   pageSize?: number
@@ -229,4 +292,39 @@ export async function apiReviewWithdrawal(
     { status }
   )
   return mapWithdrawal(data)
+}
+
+export async function apiAdminCompleteWithdrawal(withdrawalId: string): Promise<Withdrawal> {
+  const { data } = await api.post<RawWithdrawal>(
+    `/api/admin/withdrawals/${withdrawalId}/complete`
+  )
+  return mapWithdrawal(data)
+}
+
+export async function apiSendBroadcastMessage(payload: {
+  title: string
+  message: string
+  type?: "contribution" | "savings" | "withdrawal" | "system"
+}): Promise<{ recipients: number }> {
+  const { data } = await api.post<{ recipients: number }>("/api/admin/messages/broadcast", {
+    title: payload.title,
+    message: payload.message,
+    type: payload.type ?? "system",
+  })
+  return data
+}
+
+export async function apiSendDirectMessage(payload: {
+  userId: string
+  title: string
+  message: string
+  type?: "contribution" | "savings" | "withdrawal" | "system"
+}): Promise<{ recipient: string }> {
+  const { data } = await api.post<{ recipient: string }>("/api/admin/messages/direct", {
+    user_id: payload.userId,
+    title: payload.title,
+    message: payload.message,
+    type: payload.type ?? "system",
+  })
+  return data
 }

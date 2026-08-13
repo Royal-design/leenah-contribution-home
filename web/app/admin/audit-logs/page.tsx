@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search } from "lucide-react"
+import { Search, Trash2 } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DataTable } from "@/components/ui/data-table"
-import { useAuditLogs, auditActionLabel } from "@/hooks/queries/use-audit-logs"
+import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { useAuditLogs, auditActionLabel, useDeleteAuditLog } from "@/hooks/queries/use-audit-logs"
 import { formatDate, formatRelativeTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { AuditAction, AuditCategory, AuditLog } from "@/types"
@@ -85,6 +86,8 @@ export default function AuditLogsPage() {
     from: from || undefined,
     to: to || undefined,
   })
+  const deleteAuditLog = useDeleteAuditLog()
+  const [pendingDelete, setPendingDelete] = React.useState<AuditLog | null>(null)
 
   const items = data?.items ?? []
 
@@ -146,6 +149,23 @@ export default function AuditLogsPage() {
         </span>
       ),
     },
+    {
+      id: "actions",
+      header: "Actions",
+      meta: { align: "right" },
+      cell: ({ row }) => (
+        <div className="flex items-center justify-end">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Delete audit log entry"
+            onClick={() => setPendingDelete(row.original)}
+          >
+            <Trash2 className="text-destructive" />
+          </Button>
+        </div>
+      ),
+    },
   ]
 
   return (
@@ -175,7 +195,13 @@ export default function AuditLogsPage() {
             setPage(1)
           }}>
           <SelectTrigger className="w-full sm:w-36" aria-label="Filter by action">
-            <SelectValue placeholder="Action" />
+            <SelectValue>
+              {(value) =>
+                (value as string) === "all"
+                  ? "All actions"
+                  : auditActionLabel((value as AuditAction) ?? "create")
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All actions</SelectItem>
@@ -256,19 +282,29 @@ export default function AuditLogsPage() {
               data={items}
               mobileCard={({ original }) => (
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
                     <p className="truncate font-medium">
                       {original.actorName ?? "System"}
                     </p>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "shrink-0 font-medium capitalize",
-                        actionTone[original.action] ?? "border-transparent bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {auditActionLabel(original.action)}
-                    </Badge>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "font-medium capitalize",
+                          actionTone[original.action] ?? "border-transparent bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {auditActionLabel(original.action)}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Delete audit log entry"
+                        onClick={() => setPendingDelete(original)}
+                      >
+                        <Trash2 className="text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                   <p className="line-clamp-2 text-sm text-muted-foreground">
                     {original.description}
@@ -287,6 +323,26 @@ export default function AuditLogsPage() {
           />
         </>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Delete audit log entry?"
+        description={
+          pendingDelete
+            ? `Delete this ${auditActionLabel(pendingDelete.action)} audit log entry? This cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={deleteAuditLog.isPending}
+        onConfirm={() => {
+          if (!pendingDelete) return
+          deleteAuditLog.mutate(pendingDelete.id, {
+            onSuccess: () => setPendingDelete(null),
+          })
+        }}
+      />
     </div>
   )
 }

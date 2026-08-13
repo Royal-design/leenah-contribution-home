@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.security import decode_token
-from app.models.enums import UserRole
 from app.models.user import User
 
 bearer_scheme = HTTPBearer()
@@ -42,7 +41,7 @@ def get_current_user(
 
 
 def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != UserRole.ADMIN:
+    if not current_user.is_admin:
         raise AppException(message="You do not have permission to perform this action.", status_code=403, error_code="FORBIDDEN")
     return current_user
 

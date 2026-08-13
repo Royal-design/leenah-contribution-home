@@ -4,6 +4,7 @@ import type {
   Contribution,
   ContributionMember,
   ContributionScheduleEntry,
+  Role,
   SavingsAccount,
   SavingsGoal,
   Transaction,
@@ -24,6 +25,7 @@ export interface RawUser {
   email: string
   phone: string | null
   role: "user" | "admin"
+  roles?: string[]
   status: UserStatus
   provider: string
   avatar: string | null
@@ -34,6 +36,11 @@ export interface RawUser {
 }
 
 export function mapUser(raw: RawUser): User {
+  const roles: Role[] = raw.roles?.length
+    ? raw.roles.map((role) => (role === "admin" ? "admin" : "user"))
+    : raw.role === "admin"
+      ? ["user", "admin"]
+      : ["user"]
   return {
     id: raw.id,
     firstName: raw.first_name,
@@ -41,6 +48,7 @@ export function mapUser(raw: RawUser): User {
     email: raw.email,
     phone: raw.phone ?? "",
     role: raw.role,
+    roles,
     status: raw.status,
     avatar: raw.avatar ?? undefined,
     photo: raw.avatar ?? undefined,
@@ -146,6 +154,8 @@ export function mapContribution(raw: RawContribution): Contribution {
     members,
     schedule,
     withdrawalRule,
+    createdBy: raw.created_by ?? undefined,
+    isOpen: raw.is_open,
   }
 }
 
@@ -332,6 +342,8 @@ export interface RawSupportMessage {
 export interface RawSupportThread {
   id: string
   user_id: string
+  user_name?: string | null
+  user_email?: string | null
   subject: string
   category: string
   status: "open" | "replied" | "resolved"

@@ -9,6 +9,7 @@ export interface User {
   email: string
   phone: string
   role: Role
+  roles?: Role[]
   status: UserStatus
   avatar?: string
   photo?: string
@@ -70,6 +71,8 @@ export interface Contribution {
   withdrawalRule: WithdrawalRule
   currentUserPosition?: number
   organization?: string
+  createdBy?: string
+  isOpen: boolean
 }
 
 export type SavingsGoalStatus = "active" | "paused" | "completed"
@@ -154,6 +157,8 @@ export interface SupportMessage {
 export interface SupportThread {
   id: string
   userId: string
+  userName?: string
+  userEmail?: string
   subject: string
   category: SupportCategory
   status: SupportStatus

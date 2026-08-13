@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, X } from "lucide-react"
+import { Check, CheckCheck, X } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { PageHeader } from "@/components/shared/page-header"
@@ -12,7 +12,7 @@ import { Pagination } from "@/components/ui/pagination"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DataTable } from "@/components/ui/data-table"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
-import { useAdminWithdrawals, useReviewWithdrawal } from "@/hooks/queries/use-admin"
+import { useAdminCompleteWithdrawal, useAdminWithdrawals, useReviewWithdrawal } from "@/hooks/queries/use-admin"
 import { formatDate, formatNaira } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { Withdrawal } from "@/types"
@@ -41,6 +41,7 @@ const statusMeta: Record<Withdrawal["status"], { label: string; className: strin
 export function WithdrawalsTable({
   items,
   onReview,
+  onComplete,
 }: {
   items: Withdrawal[]
   onReview: (withdrawal: {
@@ -49,6 +50,7 @@ export function WithdrawalsTable({
     amount: number
     action: "approved" | "rejected"
   }) => void
+  onComplete: (withdrawal: Withdrawal) => void
 }) {
   const columns: ColumnDef<Withdrawal>[] = [
     {
@@ -109,6 +111,20 @@ export function WithdrawalsTable({
       header: "Actions",
       meta: { align: "right" },
       cell: ({ row }) => {
+        if (row.original.status === "approved") {
+          return (
+            <div className="flex items-center justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onComplete(row.original)}
+              >
+                <CheckCheck className="text-success" />
+                Mark completed
+              </Button>
+            </div>
+          )
+        }
         if (row.original.status !== "pending") {
           return (
             <span className="text-xs text-muted-foreground">
@@ -218,6 +234,15 @@ export function WithdrawalsTable({
                     <X className="text-destructive" />
                   </Button>
                 </div>
+              ) : original.status === "approved" ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onComplete(original)}
+                >
+                  <CheckCheck className="text-success" />
+                  Complete
+                </Button>
               ) : (
                 <span className="text-xs text-muted-foreground">
                   {original.status}
@@ -243,12 +268,14 @@ export default function AdminWithdrawalsPage() {
     status: status === "all" ? undefined : status,
   })
   const reviewWithdrawal = useReviewWithdrawal()
+  const completeWithdrawal = useAdminCompleteWithdrawal()
   const [pendingReview, setPendingReview] = React.useState<{
     id: string
     name: string
     amount: number
     action: "approved" | "rejected"
   } | null>(null)
+  const [pendingComplete, setPendingComplete] = React.useState<Withdrawal | null>(null)
 
   const items = data?.items ?? []
 
@@ -265,7 +292,13 @@ export default function AdminWithdrawalsPage() {
             setPage(1)
           }}>
           <SelectTrigger className="w-full sm:w-48" aria-label="Filter by status">
-            <SelectValue placeholder="Status" />
+            <SelectValue>
+              {(value) => {
+                const v = value as string
+                const label = v === "all" ? "All" : v ? v[0]?.toUpperCase() + v.slice(1) : "Status"
+                return label
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="pending">Pending</SelectItem>
@@ -291,7 +324,11 @@ export default function AdminWithdrawalsPage() {
         <>
           <div className="overflow-hidden rounded-xl bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <WithdrawalsTable items={items} onReview={setPendingReview} />
+              <WithdrawalsTable
+                items={items}
+                onReview={setPendingReview}
+                onComplete={setPendingComplete}
+              />
             </div>
           </div>
           <Pagination
@@ -323,6 +360,27 @@ export default function AdminWithdrawalsPage() {
             status: pendingReview.action,
           })
           setPendingReview(null)
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!pendingComplete}
+        onOpenChange={(open) => !open && setPendingComplete(null)}
+        title="Mark withdrawal as completed?"
+        description={
+          pendingComplete
+            ? `Confirm ${formatNaira(pendingComplete.amount)} for ${
+                pendingComplete.accountName || pendingComplete.destination
+              } has been paid out.`
+            : ""
+        }
+        confirmLabel="Mark completed"
+        loading={completeWithdrawal.isPending}
+        onConfirm={() => {
+          if (!pendingComplete) return
+          completeWithdrawal.mutate(pendingComplete.id, {
+            onSuccess: () => setPendingComplete(null),
+          })
         }}
       />
     </div>

@@ -27,11 +27,14 @@ export interface CreateContributionPayload {
 export interface UpdateContributionPayload {
   name?: string
   description?: string
+  organization?: string
   amount?: number
   frequency?: Frequency
   memberCount?: number
   rounds?: number
   startDate?: string
+  endDate?: string
+  withdrawalDate?: string
   status?: ContributionStatus
   isOpen?: boolean
 }
@@ -102,6 +105,7 @@ export async function apiUpdateContribution(
   const { data } = await api.patch<RawContribution>(`/api/contributions/${id}`, {
     name: payload.name,
     description: payload.description,
+    organization: payload.organization,
     amount: payload.amount,
     frequency: payload.frequency,
     member_count: payload.memberCount,

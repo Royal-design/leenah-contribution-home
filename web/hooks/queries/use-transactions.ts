@@ -8,6 +8,7 @@ import {
 } from "@/lib/api/transactions"
 import {
   apiGetNotifications,
+  apiGetUnreadCount,
   apiMarkAllNotificationsRead,
   apiUpdateNotifications,
 } from "@/lib/api/notifications"
@@ -32,6 +33,14 @@ export function useNotifications(params?: { page?: number; pageSize?: number }) 
   return useQuery({
     queryKey: queryKeys.notifications.all,
     queryFn: () => apiGetNotifications(params),
+  })
+}
+
+export function useNotificationsUnreadCount() {
+  return useQuery({
+    queryKey: queryKeys.notifications.unreadCount,
+    queryFn: apiGetUnreadCount,
+    refetchInterval: 60_000,
   })
 }
 

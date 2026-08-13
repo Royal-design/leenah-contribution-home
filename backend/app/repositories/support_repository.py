@@ -1,11 +1,12 @@
 import uuid
 
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.enums import SupportStatus
 from app.models.support_message import SupportMessage
 from app.models.support_thread import SupportThread
+from app.models.user import User
 
 
 class SupportThreadRepository:
@@ -21,7 +22,11 @@ class SupportThreadRepository:
         return thread
 
     def get(self, db: Session, thread_id: uuid.UUID) -> SupportThread | None:
-        return db.get(SupportThread, thread_id)
+        return db.execute(
+            select(SupportThread)
+            .where(SupportThread.id == thread_id)
+            .options(selectinload(SupportThread.user))
+        ).scalar_one_or_none()
 
     def list_for_user(
         self,
@@ -41,7 +46,10 @@ class SupportThreadRepository:
         ).scalar_one()
         items = list(
             db.execute(
-                select(SupportThread).where(*conditions).order_by(SupportThread.last_message_at.desc())
+                select(SupportThread)
+                .options(selectinload(SupportThread.user))
+                .where(*conditions)
+                .order_by(SupportThread.last_message_at.desc())
                 .offset((page - 1) * page_size).limit(page_size)
             ).scalars().all()
         )
@@ -64,17 +72,34 @@ class SupportThreadRepository:
             conditions.append(
                 or_(
                     SupportThread.subject.ilike(term),
-                    SupportThread.user_id.cast(str).ilike(term),
+                    User.email.ilike(term),
+                    User.first_name.ilike(term),
+                    User.last_name.ilike(term),
                 )
             )
 
-        total = db.execute(
-            select(func.count(SupportThread.id)).where(*conditions) if conditions else select(func.count(SupportThread.id))
-        ).scalar_one()
+        if conditions:
+            base = (
+                select(SupportThread)
+                .join(SupportThread.user)
+                .options(selectinload(SupportThread.user))
+                .where(*conditions)
+            )
+            count_q = (
+                select(func.count(SupportThread.id))
+                .join(SupportThread.user)
+                .where(*conditions)
+            )
+        else:
+            base = select(SupportThread).options(selectinload(SupportThread.user))
+            count_q = select(func.count(SupportThread.id))
+
+        total = db.execute(count_q).scalar_one()
         items = list(
             db.execute(
-                select(SupportThread).where(*conditions).order_by(SupportThread.last_message_at.desc())
-                .offset((page - 1) * page_size).limit(page_size)
+                base.order_by(SupportThread.last_message_at.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
             ).scalars().all()
         )
         return items, total

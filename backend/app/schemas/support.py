@@ -38,6 +38,8 @@ class SupportThreadOut(BaseModel):
 
     id: uuid.UUID
     user_id: uuid.UUID
+    user_name: str | None = None
+    user_email: str | None = None
     subject: str
     category: SupportCategory
     status: SupportStatus

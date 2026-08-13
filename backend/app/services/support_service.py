@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
-from app.models.enums import AuditAction, AuditCategory, SupportStatus
+from app.models.enums import AuditAction, AuditCategory, NotificationType, SupportStatus
 from app.models.support_thread import SupportThread
 from app.models.user import User
 from app.repositories.audit_log_repository import audit_log_repository
@@ -13,16 +13,20 @@ from app.repositories.support_repository import (
     support_thread_repository,
 )
 from app.schemas.support import SupportMessageOut, SupportThreadDetail, SupportThreadOut
+from app.services.notification_service import notification_service
 
 
 def _sender_role(user: User) -> str:
-    return "admin" if user.role.value == "admin" else "user"
+    return "admin" if user.is_admin else "user"
 
 
 def _thread_to_out(thread: SupportThread) -> SupportThreadOut:
+    user = thread.user
     return SupportThreadOut(
         id=thread.id,
         user_id=thread.user_id,
+        user_name=f"{user.first_name} {user.last_name}".strip() if user else None,
+        user_email=user.email if user else None,
         subject=thread.subject,
         category=thread.category,
         status=thread.status,
@@ -38,7 +42,7 @@ class SupportService:
         thread = support_thread_repository.get(db, thread_id)
         if thread is None:
             raise AppException(message="Thread not found.", status_code=404, error_code="THREAD_NOT_FOUND")
-        is_admin = user.role.value == "admin"
+        is_admin = user.is_admin
         if not is_admin and thread.user_id != user.id:
             raise AppException(message="Thread not found.", status_code=404, error_code="THREAD_NOT_FOUND")
         return thread
@@ -75,6 +79,13 @@ class SupportService:
             target_id=thread.id,
         )
 
+        notification_service.notify_admins(
+            db,
+            title="New support message",
+            message=f"{user.first_name} {user.last_name} wrote: {subject}",
+            type_=NotificationType.SYSTEM,
+        )
+
         return self.get_thread(db, user=user, thread_id=thread.id)
 
     def list_threads(
@@ -87,7 +98,7 @@ class SupportService:
         page: int = 1,
         page_size: int = 20,
     ) -> dict:
-        if user.role.value == "admin":
+        if user.is_admin:
             items, total = support_thread_repository.list_all(
                 db, status=status, search=search, page=page, page_size=page_size
             )
@@ -146,6 +157,22 @@ class SupportService:
         new_status = SupportStatus.REPLIED if role == "admin" else SupportStatus.OPEN
         support_thread_repository.set_status(db, thread, new_status)
 
+        if role == "admin":
+            notification_service.create(
+                db,
+                user_id=thread.user_id,
+                title="Reply from the LCH team",
+                message=f"Your conversation '{thread.subject}' has a new reply.",
+                type_=NotificationType.SYSTEM,
+            )
+        else:
+            notification_service.notify_admins(
+                db,
+                title="New support reply",
+                message=f"{user.first_name} {user.last_name} replied on '{thread.subject}'.",
+                type_=NotificationType.SYSTEM,
+            )
+
         return self.get_thread(db, user=user, thread_id=thread_id)
 
     def set_status(self, db: Session, *, user: User, thread_id: uuid.UUID, status: SupportStatus) -> SupportThreadOut:
@@ -167,7 +194,7 @@ class SupportService:
         return _thread_to_out(thread)
 
     def unread_count(self, db: Session, *, user: User) -> int:
-        if user.role.value == "admin":
+        if user.is_admin:
             return support_thread_repository.total_unread_admin(db)
         return support_thread_repository.total_unread_user(db, user.id)
 

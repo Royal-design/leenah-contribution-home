@@ -1,16 +1,51 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import get_current_user
-from app.core.database import get_db
+from app.core import realtime
+from app.core.database import SessionLocal, get_db
+from app.core.exceptions import AppException
+from app.core.security import decode_token
 from app.models.user import User
 from app.schemas.notification import MarkReadResponse
 from app.schemas.response import MessageResponse, SuccessResponse
 from app.services.notification_service import notification_service
 
 router = APIRouter(tags=["Notifications"])
+
+
+@router.get("/stream")
+async def stream_notifications(token: str = Query(...)):
+    db = SessionLocal()
+    try:
+        try:
+            payload = decode_token(token)
+            user_id = uuid.UUID(str(payload.get("sub")))
+        except (AppException, AttributeError, TypeError, ValueError):
+            raise AppException(
+                message="Invalid authentication credentials.",
+                status_code=401,
+                error_code="INVALID_TOKEN",
+            )
+        user = db.get(User, user_id)
+        if user is None or not user.is_active:
+            raise AppException(
+                message="Invalid authentication credentials.",
+                status_code=401,
+                error_code="INVALID_TOKEN",
+            )
+        groups = realtime.subscription_keys(user_id=user.id, is_admin=user.is_admin)
+    finally:
+        db.close()
+
+    return StreamingResponse(
+        realtime.stream(groups),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("")

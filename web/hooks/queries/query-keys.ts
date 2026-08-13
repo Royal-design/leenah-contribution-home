@@ -49,6 +49,7 @@ export const queryKeys = {
   adminContributions: {
     all: ["admin-contributions"] as const,
     list: (filters: unknown) => ["admin-contributions", filters] as const,
+    detail: (id: string) => ["admin-contributions", id] as const,
   },
   adminTransactions: {
     all: ["admin-transactions"] as const,

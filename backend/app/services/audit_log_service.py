@@ -68,5 +68,28 @@ class AuditLogService:
             pages=(total + page_size - 1) // page_size if total else 0,
         )
 
+    def delete(self, db: Session, *, actor, entry_id: uuid.UUID) -> None:
+        entry = audit_log_repository.get(db, entry_id)
+        if entry is None:
+            raise AppException(message="Audit log entry not found.", status_code=404, error_code="AUDIT_LOG_NOT_FOUND")
+
+        description = f"Deleted audit log entry for '{entry.action.value} / {entry.category.value}'."
+        if actor is not None:
+            audit_log_repository.create(
+                db,
+                actor_id=actor.id,
+                actor_name=f"{actor.first_name} {actor.last_name}",
+                actor_email=actor.email,
+                actor_role=actor.role,
+                action=AuditAction.DELETE,
+                category=AuditCategory.SYSTEM,
+                description=description,
+                target=entry.description[:120],
+                target_id=entry.id,
+            )
+
+        db.delete(entry)
+        db.flush()
+
 
 audit_log_service = AuditLogService()

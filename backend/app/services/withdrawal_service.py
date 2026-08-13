@@ -7,6 +7,7 @@ from app.core.exceptions import AppException
 from app.models.enums import (
     AuditAction,
     AuditCategory,
+    NotificationType,
     TransactionStatus,
     TransactionType,
     WithdrawalStatus,
@@ -20,6 +21,7 @@ from app.repositories.savings_repository import savings_account_repository
 from app.repositories.transaction_repository import transaction_repository
 from app.repositories.withdrawal_repository import withdrawal_repository
 from app.schemas.withdrawal import WithdrawalOut
+from app.services.notification_service import notification_service
 
 
 def _make_reference() -> str:
@@ -134,6 +136,13 @@ class WithdrawalService:
             target_id=withdrawal.id,
             details={"bank_name": bank_name, "account_number": account_number},
         )
+
+        notification_service.notify_admins(
+            db,
+            title="New withdrawal request",
+            message=f"{user.first_name} {user.last_name} requested a {withdrawal_type} withdrawal of {amount}.",
+            type_=NotificationType.WITHDRAWAL,
+        )
         return withdrawal
 
     def list_mine(self, db: Session, *, user: User, status: WithdrawalStatus | None = None, page: int = 1, page_size: int = 20):
@@ -201,6 +210,50 @@ class WithdrawalService:
             description=f"{status.title()} withdrawal of {withdrawal.amount} for user {withdrawal.user_id}.",
             target=withdrawal.destination,
             target_id=withdrawal.id,
+        )
+
+        notification_service.create(
+            db,
+            user_id=withdrawal.user_id,
+            title=f"Withdrawal {status}",
+            message=f"Your withdrawal of {withdrawal.amount} was {status}.",
+            type_=NotificationType.WITHDRAWAL,
+        )
+        db.flush()
+        return withdrawal
+
+    def complete(self, db: Session, *, actor: User, withdrawal_id: uuid.UUID) -> Withdrawal:
+        withdrawal = withdrawal_repository.get(db, withdrawal_id)
+        if withdrawal is None:
+            raise AppException(message="Withdrawal not found.", status_code=404, error_code="WITHDRAWAL_NOT_FOUND")
+        if withdrawal.status != WithdrawalStatus.APPROVED:
+            raise AppException(
+                message="Only approved withdrawals can be marked as completed.",
+                status_code=400,
+                error_code="INVALID_STATUS_TRANSITION",
+            )
+
+        withdrawal.status = WithdrawalStatus.COMPLETED
+
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=actor.role,
+            action=AuditAction.UPDATE,
+            category=AuditCategory.WITHDRAWAL,
+            description=f"Completed withdrawal of {withdrawal.amount} for user {withdrawal.user_id}.",
+            target=withdrawal.destination,
+            target_id=withdrawal.id,
+        )
+
+        notification_service.create(
+            db,
+            user_id=withdrawal.user_id,
+            title="Withdrawal completed",
+            message=f"Your withdrawal of {withdrawal.amount} has been paid out.",
+            type_=NotificationType.WITHDRAWAL,
         )
         db.flush()
         return withdrawal

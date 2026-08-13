@@ -55,12 +55,14 @@ export const adminNavGroups: Array<{
       { label: "Users", href: "/admin/users", icon: User },
       { label: "Withdrawals", href: "/admin/withdrawals", icon: Wallet },
       { label: "Transactions", href: "/admin/transactions", icon: ArrowLeftRight },
+      { label: "Messages", href: "/admin/support", icon: LifeBuoy },
       { label: "Audit Logs", href: "/admin/audit-logs", icon: ScrollText },
     ],
   },
   {
     label: "Settings",
     items: [
+      { label: "Profile", href: "/admin/profile", icon: User },
       { label: "Settings", href: "/admin/settings", icon: Settings },
     ],
   },

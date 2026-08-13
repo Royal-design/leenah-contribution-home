@@ -10,6 +10,7 @@ from app.models.enums import (
     AuditAction,
     AuditCategory,
     ContributionStatus,
+    NotificationType,
     ScheduleStatus,
     TransactionStatus,
     TransactionType,
@@ -22,6 +23,8 @@ from app.repositories.contribution_repository import (
     contribution_schedule_repository,
 )
 from app.repositories.transaction_repository import transaction_repository
+from app.repositories.user_repository import user_repository
+from app.services.notification_service import notification_service
 from app.schemas.contribution import (
     ContributionMemberOut,
     ContributionOut,
@@ -96,6 +99,7 @@ class ContributionService:
             member_count=payload.member_count,
             rounds=payload.rounds,
             start_date=payload.start_date,
+            end_date=payload.end_date,
             withdrawal_date=payload.fixed_withdrawal_date,
             total_expected=total_expected,
             withdrawal_rule=withdrawal_rule,
@@ -135,6 +139,13 @@ class ContributionService:
             description=f"Created contribution '{contribution.name}'.",
             target=contribution.name,
             target_id=contribution.id,
+        )
+
+        notification_service.notify_all_users(
+            db,
+            title="New contribution plan",
+            message=f"{contribution.name} is now available — {contribution.amount}/{contribution.frequency.value}.",
+            type_=NotificationType.CONTRIBUTION,
         )
 
         self._sync_schedule(db, contribution)
@@ -189,8 +200,7 @@ class ContributionService:
             )
         return contribution
 
-    def update(self, db: Session, *, user: User, contribution_id: uuid.UUID, payload) -> ContributionOut:
-        contribution = self._get_owned(db, user=user, contribution_id=contribution_id)
+    def _apply_update(self, db: Session, contribution: Contribution, payload) -> None:
         data = payload.model_dump(exclude_unset=True)
 
         # Recompute expected total when amount/rounds change.
@@ -200,6 +210,15 @@ class ContributionService:
                 data.get("rounds") or contribution.rounds
             )
             revalidate = True
+
+        if "withdrawal_date" in data:
+            withdrawal_date = data.pop("withdrawal_date")
+            contribution.withdrawal_date = withdrawal_date
+            contribution.withdrawal_rule = (
+                {"type": "fixed_date", "fixed_date": withdrawal_date.isoformat()}
+                if withdrawal_date is not None
+                else None
+            )
 
         if data.pop("withdrawal_rule", None) is not None:
             pass
@@ -219,6 +238,11 @@ class ContributionService:
 
         db.flush()
 
+    def update(self, db: Session, *, user: User, contribution_id: uuid.UUID, payload) -> ContributionOut:
+        contribution = self._get_owned(db, user=user, contribution_id=contribution_id)
+
+        self._apply_update(db, contribution, payload)
+
         audit_log_repository.create(
             db,
             actor_id=user.id,
@@ -237,7 +261,6 @@ class ContributionService:
 
     def delete(self, db: Session, *, user: User, contribution_id: uuid.UUID) -> None:
         contribution = self._get_owned(db, user=user, contribution_id=contribution_id)
-        name = contribution.name
 
         audit_log_repository.create(
             db,
@@ -247,12 +270,143 @@ class ContributionService:
             actor_role=user.role,
             action=AuditAction.DELETE,
             category=AuditCategory.CONTRIBUTION,
-            description=f"Deleted contribution '{name}'.",
+            description=f"Deleted contribution '{contribution.name}'.",
+            target=contribution.name,
+            target_id=contribution.id,
+        )
+        db.delete(contribution)
+        db.flush()
+
+    def admin_update(self, db: Session, *, actor: User, contribution_id: uuid.UUID, payload) -> ContributionOut:
+        contribution = contribution_repository.get(db, contribution_id)
+        if contribution is None:
+            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+
+        self._apply_update(db, contribution, payload)
+
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=actor.role,
+            action=AuditAction.UPDATE,
+            category=AuditCategory.CONTRIBUTION,
+            description=f"Admin updated contribution '{contribution.name}'.",
+            target=contribution.name,
+            target_id=contribution.id,
+        )
+
+        self._sync_schedule(db, contribution)
+        return self._build_out(contribution)
+
+    def admin_delete(self, db: Session, *, actor: User, contribution_id: uuid.UUID) -> None:
+        contribution = contribution_repository.get(db, contribution_id)
+        if contribution is None:
+            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+        name = contribution.name
+
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=actor.role,
+            action=AuditAction.DELETE,
+            category=AuditCategory.CONTRIBUTION,
+            description=f"Admin deleted contribution '{name}'.",
             target=name,
             target_id=contribution.id,
         )
         db.delete(contribution)
         db.flush()
+
+    def admin_add_member(self, db: Session, *, actor: User, contribution_id: uuid.UUID, user_id: uuid.UUID) -> ContributionOut:
+        contribution = contribution_repository.get(db, contribution_id)
+        if contribution is None:
+            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+
+        member_user = user_repository.get(db, user_id)
+        if member_user is None:
+            raise AppException(message="User not found.", status_code=404, error_code="USER_NOT_FOUND")
+
+        existing = contribution_member_repository.get(db, contribution_id, user_id)
+        if existing is not None:
+            raise AppException(
+                message="This user is already a member of the contribution.",
+                status_code=400,
+                error_code="ALREADY_MEMBER",
+            )
+
+        current = contribution_member_repository.count_members(db, contribution_id)
+        next_position = current + 1
+        if next_position > contribution.member_count:
+            raise AppException(message="This contribution is full.", status_code=400, error_code="CONTRIBUTION_FULL")
+
+        contribution_member_repository.create(
+            db,
+            contribution_id=contribution_id,
+            user_id=user_id,
+            display_name=f"{member_user.first_name} {member_user.last_name}".strip(),
+            avatar=member_user.avatar,
+            position=next_position,
+        )
+
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=actor.role,
+            action=AuditAction.UPDATE,
+            category=AuditCategory.CONTRIBUTION,
+            description=f"Admin added {member_user.first_name} {member_user.last_name} to '{contribution.name}' at position {next_position}.",
+            target=contribution.name,
+            target_id=contribution.id,
+        )
+
+        db.flush()
+        self._sync_schedule(db, contribution)
+        return self._build_out(contribution)
+
+    def admin_remove_member(self, db: Session, *, actor: User, contribution_id: uuid.UUID, user_id: uuid.UUID) -> ContributionOut:
+        contribution = contribution_repository.get(db, contribution_id)
+        if contribution is None:
+            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+
+        member = contribution_member_repository.get(db, contribution_id, user_id)
+        if member is None:
+            raise AppException(
+                message="This user is not a member of the contribution.",
+                status_code=400,
+                error_code="NOT_MEMBER",
+            )
+
+        if contribution.created_by == user_id:
+            raise AppException(
+                message="The contribution creator cannot be removed.",
+                status_code=400,
+                error_code="CANNOT_REMOVE_CREATOR",
+            )
+
+        contribution_member_repository.delete(db, member)
+
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=actor.role,
+            action=AuditAction.DELETE,
+            category=AuditCategory.CONTRIBUTION,
+            description=f"Admin removed {member.display_name} from '{contribution.name}'.",
+            target=contribution.name,
+            target_id=contribution.id,
+        )
+
+        db.flush()
+        self._sync_schedule(db, contribution)
+        return self._build_out(contribution)
 
     def join(self, db: Session, *, user: User, contribution_id: uuid.UUID) -> ContributionOut:
         contribution = contribution_repository.get(db, contribution_id)
@@ -401,6 +555,14 @@ class ContributionService:
             target=contribution.name,
             target_id=contribution.id,
             details={"schedule_id": schedule.id},
+        )
+
+        notification_service.create(
+            db,
+            user_id=user.id,
+            title="Payment recorded",
+            message=f"You paid {schedule.amount} for '{contribution.name}' ({schedule.label}).",
+            type_=NotificationType.CONTRIBUTION,
         )
 
         self._sync_schedule(db, contribution)

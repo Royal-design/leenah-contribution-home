@@ -3,7 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable } from "@/components/ui/data-table"
-import { Undo2 } from "lucide-react"
+import { Undo2, Trash2 } from "lucide-react"
 import {
   transactionStatusMeta,
   transactionTypeMeta,
@@ -15,9 +15,11 @@ import type { Transaction } from "@/types"
 export function TransactionTable({
   transactions,
   onRevert,
+  onDelete,
 }: {
   transactions: Transaction[]
   onRevert?: (transaction: Transaction) => void
+  onDelete?: (transaction: Transaction) => void
 }) {
   const columns: ColumnDef<Transaction>[] = [
     {
@@ -84,23 +86,40 @@ export function TransactionTable({
         </Badge>
       ),
     },
-    ...(onRevert
+    ...(onRevert || onDelete
       ? [
           {
             id: "actions",
             header: "Actions",
             meta: { align: "right" as const },
-            cell: ({ row }: { row: { original: Transaction } }) =>
-              row.original.status === "failed" ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onRevert(row.original)}
-                >
-                  <Undo2 />
-                  Revert
-                </Button>
-              ) : null,
+            cell: ({ row }: { row: { original: Transaction } }) => {
+              const deletable =
+                row.original.status === "pending" || row.original.status === "failed"
+              return (
+                <div className="flex items-center justify-end gap-1">
+                  {onRevert && row.original.status === "failed" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onRevert(row.original)}
+                    >
+                      <Undo2 />
+                      Revert
+                    </Button>
+                  )}
+                  {onDelete && deletable && (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Delete transaction"
+                      onClick={() => onDelete(row.original)}
+                    >
+                      <Trash2 className="text-destructive" />
+                    </Button>
+                  )}
+                </div>
+              )
+            },
           },
         ]
       : []),
@@ -146,6 +165,16 @@ export function TransactionTable({
                   >
                     <Undo2 />
                     Revert
+                  </Button>
+                )}
+                {onDelete && (original.status === "pending" || original.status === "failed") && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Delete transaction"
+                    onClick={() => onDelete(original)}
+                  >
+                    <Trash2 className="text-destructive" />
                   </Button>
                 )}
                 <Badge

@@ -8,9 +8,11 @@ from app.api.dependencies.auth import get_current_admin
 from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.models.enums import AuditAction, AuditCategory
+from app.models.user import User
 from app.schemas.audit_log import AuditLogList, AuditLogOut
-from app.schemas.response import SuccessResponse
+from app.schemas.response import MessageResponse, SuccessResponse
 from app.services.audit_log_service import audit_log_service
+
 
 router = APIRouter(tags=["Audit Logs"])
 
@@ -59,3 +61,13 @@ def get_audit_log(
             error_code="AUDIT_LOG_NOT_FOUND",
         )
     return SuccessResponse(message="Audit log retrieved.", data=entry)
+
+
+@router.delete("/{entry_id}", response_model=MessageResponse)
+def delete_audit_log(
+    entry_id: uuid.UUID,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    audit_log_service.delete(db, actor=admin, entry_id=entry_id)
+    return MessageResponse(message="Audit log entry deleted.")

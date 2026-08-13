@@ -57,3 +57,7 @@ export async function apiGetAuditLog(id: string): Promise<AuditLog> {
   const { data } = await api.get<RawAuditLog>(`/api/audit-logs/${id}`)
   return mapAuditLog(data)
 }
+
+export async function apiDeleteAuditLog(id: string): Promise<void> {
+  await api.delete(`/api/audit-logs/${id}`)
+}

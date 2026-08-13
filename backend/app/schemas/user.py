@@ -15,6 +15,7 @@ class UserOut(BaseModel):
     email: str
     phone: str | None
     role: UserRole
+    roles: list[str] = []
     status: UserStatus
     provider: str
     avatar: str | None
@@ -44,6 +45,10 @@ class BulkInviteRequest(BaseModel):
 
 class UpdateUserRoleRequest(BaseModel):
     role: UserRole
+
+
+class UpdateUserRolesRequest(BaseModel):
+    roles: list[UserRole] = Field(min_length=1, max_length=2)
 
 
 class UpdateUserStatusRequest(BaseModel):

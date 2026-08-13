@@ -17,6 +17,22 @@ import type { TransactionStatus, TransactionType } from "@/types"
 
 const PAGE_SIZE = 10
 
+const typeLabels: Record<string, string> = {
+  all: "All types",
+  contribution: "Contribution",
+  savings: "Savings",
+  funding: "Funding",
+  withdrawal: "Withdrawal",
+}
+
+const statusLabels: Record<string, string> = {
+  all: "All statuses",
+  successful: "Successful",
+  pending: "Pending",
+  failed: "Failed",
+  reverted: "Reverted",
+}
+
 export default function TransactionsPage() {
   const [search, setSearch] = React.useState("")
   const [type, setType] = React.useState<TransactionType | "all">("all")
@@ -74,7 +90,9 @@ export default function TransactionsPage() {
             setPage(1)
           }}>
           <SelectTrigger className="w-full sm:w-36" aria-label="Filter by type">
-            <SelectValue placeholder="All types" />
+            <SelectValue>
+              {(value) => typeLabels[(value as string) ?? "all"] ?? "All types"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
@@ -89,7 +107,9 @@ export default function TransactionsPage() {
             setPage(1)
           }}>
           <SelectTrigger className="w-full sm:w-40" aria-label="Filter by status">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue>
+              {(value) => statusLabels[(value as string) ?? "all"] ?? "All statuses"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>

@@ -20,6 +20,7 @@ class ContributionCreate(BaseModel):
     member_count: int = Field(ge=1, le=500)
     rounds: int = Field(default=12, ge=1, le=120)
     start_date: datetime
+    end_date: datetime | None = None
     withdrawal_rule: WithdrawalRuleType | None = None
     fixed_withdrawal_date: datetime | None = None
 
@@ -33,6 +34,8 @@ class ContributionUpdate(BaseModel):
     member_count: int | None = Field(default=None, ge=1, le=500)
     rounds: int | None = Field(default=None, ge=1, le=120)
     start_date: datetime | None = None
+    end_date: datetime | None = None
+    withdrawal_date: datetime | None = None
     status: ContributionStatus | None = None
     is_open: bool | None = None
 
@@ -99,3 +102,7 @@ class ContributionList(BaseModel):
 class PayContributionRequest(BaseModel):
     schedule_id: int | None = None
     amount: int | None = Field(default=None, gt=0)
+
+
+class ContributionMemberAdd(BaseModel):
+    user_id: uuid.UUID

@@ -9,7 +9,10 @@ from app.models.user import User
 
 
 class UserRepository:
-    def create(self, db: Session, *, first_name, last_name, email, password, phone=None, provider="credentials", role=None) -> User:
+    def create(self, db: Session, *, first_name, last_name, email, password, phone=None, provider="credentials", role=None, roles=None) -> User:
+        role = role or UserRole.USER
+        if roles is None:
+            roles = [UserRole.ADMIN, UserRole.USER] if role == UserRole.ADMIN else [UserRole.USER]
         user = User(
             first_name=first_name,
             last_name=last_name,
@@ -17,7 +20,8 @@ class UserRepository:
             password=password,
             phone=phone,
             provider=provider,
-            role=role or UserRole.USER,
+            role=role,
+            roles=roles,
         )
         db.add(user)
         db.flush()
@@ -71,6 +75,22 @@ class UserRepository:
 
     def count_since(self, db: Session, since: datetime) -> int:
         return db.execute(select(func.count(User.id)).where(User.created_at >= since)).scalar_one()
+
+    def list_active(self, db: Session) -> list[User]:
+        return list(
+            db.execute(
+                select(User).where(User.is_active.is_(True)).order_by(User.created_at)
+            ).scalars().all()
+        )
+
+    def list_admins(self, db: Session) -> list[User]:
+        return list(
+            db.execute(
+                select(User).where(User.is_active.is_(True)).where(
+                    or_(User.role == UserRole.ADMIN, User.roles.contains([UserRole.ADMIN.value]))
+                )
+            ).scalars().all()
+        )
 
 
 user_repository = UserRepository()

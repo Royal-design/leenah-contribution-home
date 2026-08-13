@@ -127,14 +127,21 @@ class UserService:
 
     def set_role(self, db: Session, *, actor: User, user_id: uuid.UUID, role) -> User:
         user = self.get_user(db, user_id)
-        if user.id == actor.id and role != "admin":
+        role_enum = UserRole(role)
+        if user.id == actor.id and role_enum != UserRole.ADMIN:
             raise AppException(
                 message="You cannot demote your own admin role.",
                 status_code=400,
                 error_code="CANNOT_DEMOTE_SELF",
             )
         old_role = user.role
-        user.role = role
+        user.role = role_enum
+        # Admins keep the user role too so they can switch dashboards.
+        user.roles = (
+            [UserRole.ADMIN, UserRole.USER]
+            if role_enum == UserRole.ADMIN
+            else [UserRole.USER]
+        )
         db.flush()
 
         audit_log_repository.create(
@@ -142,10 +149,44 @@ class UserService:
             actor_id=actor.id,
             actor_name=f"{actor.first_name} {actor.last_name}",
             actor_email=actor.email,
-            actor_role=actor.role,
+            actor_role=",".join(actor.roles),
             action=AuditAction.UPDATE,
             category=AuditCategory.USER,
             description=f"Changed {user.email} role from {old_role} to {role}.",
+            target=user.email,
+            target_id=user.id,
+        )
+        return user
+
+    def set_roles(self, db: Session, *, actor: User, user_id: uuid.UUID, roles) -> User:
+        user = self.get_user(db, user_id)
+        role_set = set(UserRole(r.value if hasattr(r, "value") else r) for r in roles)
+        if not role_set:
+            raise AppException(
+                message="At least one role is required.",
+                status_code=400,
+                error_code="NO_ROLES",
+            )
+        if user.id == actor.id and UserRole.ADMIN not in role_set:
+            raise AppException(
+                message="You cannot remove admin from your own account.",
+                status_code=400,
+                error_code="CANNOT_DEMOTE_SELF",
+            )
+        old_roles = list(user.roles)
+        user.roles = [UserRole.ADMIN.value, UserRole.USER.value] if UserRole.ADMIN in role_set else [UserRole.USER.value]
+        user.role = UserRole.ADMIN if UserRole.ADMIN in role_set else UserRole.USER
+        db.flush()
+
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=",".join(actor.roles),
+            action=AuditAction.UPDATE,
+            category=AuditCategory.USER,
+            description=f"Changed {user.email} roles from {','.join(old_roles)} to {','.join(user.roles)}.",
             target=user.email,
             target_id=user.id,
         )

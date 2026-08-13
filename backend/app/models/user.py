@@ -38,6 +38,9 @@ class User(Base):
     password: Mapped[str] = mapped_column(Text, nullable=False)
 
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), nullable=False, default=UserRole.USER)
+    roles: Mapped[list[str]] = mapped_column(
+        JSONB, default=lambda: [UserRole.USER], nullable=False
+    )
     status: Mapped[UserStatus] = mapped_column(SAEnum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
     provider: Mapped[AuthProvider] = mapped_column(SAEnum(AuthProvider), nullable=False, default=AuthProvider.CREDENTIALS)
 
@@ -55,6 +58,10 @@ class User(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    @property
+    def is_admin(self) -> bool:
+        return UserRole.ADMIN in self.roles or self.role == UserRole.ADMIN
 
     # Relationships
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")

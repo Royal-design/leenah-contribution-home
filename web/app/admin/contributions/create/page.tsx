@@ -57,6 +57,11 @@ const formSchema = z
       .int()
       .min(2, "At least 2 members.")
       .max(100, "Maximum 100 members."),
+    rounds: z.coerce
+      .number({ message: "Enter a valid number." })
+      .int()
+      .min(1, "At least 1 round.")
+      .max(120, "Maximum 120 rounds."),
     withdrawalDate: z.string().min(1, "Choose a withdrawal date."),
     status: z.enum(["draft", "active", "paused", "completed"], { message: "Select a status." }),
     withdrawalRule: z.string().trim().min(5, "Describe the withdrawal rule."),
@@ -87,6 +92,7 @@ export default function CreateContributionPage() {
       startDate: "",
       endDate: "",
       memberCount: 12,
+      rounds: 12,
       withdrawalDate: "",
       status: "draft",
       withdrawalRule: "Full payout after all rounds are confirmed.",
@@ -96,14 +102,6 @@ export default function CreateContributionPage() {
   const watched = form.watch()
 
   function onSubmit(values: FormValues) {
-    const rounds =
-      values.frequency === "weekly"
-        ? 52
-        : values.frequency === "biweekly"
-          ? 26
-          : values.frequency === "monthly"
-            ? 12
-            : 12
     createContribution.mutate(
       {
         name: values.name,
@@ -111,8 +109,9 @@ export default function CreateContributionPage() {
         amount: values.amount,
         frequency: values.frequency,
         memberCount: values.memberCount,
-        rounds,
+        rounds: values.rounds,
         startDate: values.startDate,
+        endDate: values.endDate,
         withdrawalDate: values.withdrawalDate,
       },
       {
@@ -247,7 +246,7 @@ export default function CreateContributionPage() {
                   </Field>
                 </div>
 
-                <div className="grid gap-5 sm:grid-cols-2">
+                <div className="grid gap-5 sm:grid-cols-3">
                   <Field>
                     <FieldLabel>Number of members</FieldLabel>
                     <Controller
@@ -263,6 +262,29 @@ export default function CreateContributionPage() {
                             {...field}
                           />
                           <FieldError errors={form.formState.errors.memberCount ? [form.formState.errors.memberCount] : []} />
+                        </>
+                      )}
+                    />
+                  </Field>
+
+                  <Field>
+                    <FieldLabel>Rounds</FieldLabel>
+                    <Controller
+                      control={form.control}
+                      name="rounds"
+                      render={({ field }) => (
+                        <>
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            aria-invalid={!!form.formState.errors.rounds}
+                            {...field}
+                          />
+                          <FieldDescription>
+                            Number of contribution rounds.
+                          </FieldDescription>
+                          <FieldError errors={form.formState.errors.rounds ? [form.formState.errors.rounds] : []} />
                         </>
                       )}
                     />
@@ -406,7 +428,8 @@ export default function CreateContributionPage() {
 function PreviewSummary({ values }: { values: FormValues }) {
   const amount = Number(values.amount) || 0
   const members = Number(values.memberCount) || 0
-  const totalExpected = amount * (values.frequency === "weekly" ? 52 : values.frequency === "biweekly" ? 26 : 12)
+  const rounds = Number(values.rounds) || 0
+  const totalExpected = amount * rounds
 
   return (
     <Card>
@@ -427,7 +450,7 @@ function PreviewSummary({ values }: { values: FormValues }) {
         <div>
           <p className="text-muted-foreground">Total expected</p>
           <p className="font-medium tabular-nums">
-            {formatNaira(totalExpected)} / year
+            {formatNaira(totalExpected)} / {rounds} {rounds === 1 ? "round" : "rounds"}
           </p>
         </div>
         <div>

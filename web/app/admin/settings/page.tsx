@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import { toast } from "sonner"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm, type Resolver } from "react-hook-form"
@@ -19,6 +20,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { useAuthStore } from "@/stores/auth-store"
@@ -39,6 +41,7 @@ type SettingsValues = z.infer<typeof settingsSchema>
 
 export default function AdminSettingsPage() {
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
   const [pending, setPending] = React.useState(false)
   const deleteAccount = useAuthStore((state) => state.deleteAccount)
   const [confirmDelete, setConfirmDelete] = React.useState(false)
@@ -240,6 +243,33 @@ export default function AdminSettingsPage() {
       </form>
 
       <div className="flex max-w-3xl flex-col gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Appearance</CardTitle>
+            <CardDescription>Choose how the admin panel looks for you.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RadioGroup
+              value={theme ?? "system"}
+              onValueChange={(value) => setTheme(value)}
+              className="flex flex-col gap-3 sm:flex-row sm:gap-6"
+            >
+              <label className="flex items-center gap-2.5">
+                <RadioGroupItem value="light" />
+                <span className="text-sm">Light</span>
+              </label>
+              <label className="flex items-center gap-2.5">
+                <RadioGroupItem value="dark" />
+                <span className="text-sm">Dark</span>
+              </label>
+              <label className="flex items-center gap-2.5">
+                <RadioGroupItem value="system" />
+                <span className="text-sm">System</span>
+              </label>
+            </RadioGroup>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-destructive">Danger zone</CardTitle>

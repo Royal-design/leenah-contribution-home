@@ -33,6 +33,8 @@ function mapThread(raw: RawSupportThread): SupportThread {
   return {
     id: raw.id,
     userId: raw.user_id,
+    userName: raw.user_name ?? undefined,
+    userEmail: raw.user_email ?? undefined,
     subject: raw.subject,
     category: raw.category as SupportCategory,
     status: raw.status,
