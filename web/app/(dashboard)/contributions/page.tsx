@@ -37,6 +37,8 @@ export default function ContributionsPage() {
   const available = useOpenContributions({ page, pageSize: PAGE_SIZE })
   const joinContribution = useJoinContribution()
 
+  const joiningId = joinContribution.isPending ? joinContribution.variables : null
+
   if (joined.isPending || available.isPending) {
     return <PageSkeleton />
   }
@@ -158,7 +160,7 @@ export default function ContributionsPage() {
                 <AvailablePlanCard
                   key={plan.id}
                   plan={plan}
-                  joining={joinContribution.isPending}
+                  joining={joiningId === plan.id}
                   onJoin={() => handleJoin(plan.id)}
                 />
               ))}
