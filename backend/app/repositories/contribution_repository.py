@@ -36,7 +36,10 @@ class ContributionRepository:
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Contribution], int]:
-        member_ids = select(ContributionMember.contribution_id).where(ContributionMember.user_id == user_id)
+        member_ids = select(ContributionMember.contribution_id).where(
+            ContributionMember.user_id == user_id,
+            ContributionMember.status == MemberStatus.ACTIVE,
+        )
         conditions = [or_(Contribution.id.in_(member_ids), Contribution.created_by == user_id)]
 
         base = select(Contribution).options(selectinload(Contribution.members))
