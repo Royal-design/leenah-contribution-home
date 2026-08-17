@@ -17,6 +17,8 @@ class UserBankAccountRepository:
         account_number: str,
         account_name: str | None,
         is_default: bool = False,
+        is_verified: bool = False,
+        provider_recipient_code: str | None = None,
     ) -> UserBankAccount:
         if is_default:
             self.clear_default(db, user_id)
@@ -27,6 +29,8 @@ class UserBankAccountRepository:
             account_number=account_number,
             account_name=account_name,
             is_default=is_default,
+            is_verified=is_verified,
+            provider_recipient_code=provider_recipient_code,
         )
         db.add(account)
         db.flush()

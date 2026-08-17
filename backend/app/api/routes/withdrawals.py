@@ -21,6 +21,7 @@ def request_withdrawal(payload: WithdrawalCreate, user: User = Depends(get_curre
         user=user,
         amount=payload.amount,
         withdrawal_type=payload.withdrawal_type,
+        bank_account_id=payload.bank_account_id,
         bank_name=payload.bank_name,
         account_number=payload.account_number,
         account_name=payload.account_name,

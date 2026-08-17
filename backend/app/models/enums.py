@@ -84,8 +84,41 @@ class TransactionStatus(StrEnum):
 class WithdrawalStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
+    PROCESSING = "processing"
     REJECTED = "rejected"
     COMPLETED = "completed"
+    FAILED = "failed"
+    REVERSED = "reversed"
+
+
+class DVStatus(StrEnum):
+    PENDING = "pending"
+    ACTIVE = "active"
+    FAILED = "failed"
+    INACTIVE = "inactive"
+
+
+class PaymentProvider(StrEnum):
+    PAYSTACK = "paystack"
+    MOCK = "mock"
+
+
+class PaymentStatus(StrEnum):
+    PENDING = "pending"
+    SUCCESSFUL = "successful"
+    FAILED = "failed"
+    REVERSED = "reversed"
+
+
+class PaymentPurpose(StrEnum):
+    WALLET_FUNDING = "wallet_funding"
+    CONTRIBUTION_FUNDING = "contribution_funding"
+
+
+class WebhookEventStatus(StrEnum):
+    RECEIVED = "received"
+    PROCESSED = "processed"
+    FAILED = "failed"
 
 
 class NotificationType(StrEnum):

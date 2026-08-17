@@ -1,7 +1,7 @@
 from datetime import datetime
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.models.enums import SavingsGoalStatus
 
@@ -12,10 +12,21 @@ class SavingsAccountOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
     balance: int
+    reserved: int
     total_saved: int
     total_withdrawn: int
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def available_balance(self) -> int:
+        return self.balance
+
+    @computed_field
+    @property
+    def total_balance(self) -> int:
+        return self.balance + self.reserved
 
 
 class SavingsGoalOut(BaseModel):

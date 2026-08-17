@@ -9,6 +9,12 @@ export const queryKeys = {
     goals: ["savings", "goals"] as const,
   },
   savingsGrowth: ["savings-growth"] as const,
+  wallet: {
+    all: ["wallet"] as const,
+    dva: ["wallet", "dva"] as const,
+    bankAccounts: ["wallet", "bank-accounts"] as const,
+    banks: ["wallet", "banks"] as const,
+  },
   transactions: {
     all: ["transactions"] as const,
     list: (filters: unknown) => ["transactions", filters] as const,

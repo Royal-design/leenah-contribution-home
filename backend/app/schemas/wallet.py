@@ -10,6 +10,8 @@ class MockFundRequest(BaseModel):
 
 class WalletOut(BaseModel):
     balance: int
+    reserved: int
+    total_balance: int
     total_saved: int
     total_withdrawn: int
     account: SavingsAccountDetail | None = None

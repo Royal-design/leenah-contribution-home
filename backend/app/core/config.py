@@ -31,9 +31,16 @@ class Settings(BaseSettings):
     google_client_id: str
     google_client_secret: str
 
-    # Paystack (integrated later)
+    # Paystack
     paystack_secret_key: str = ""
     paystack_public_key: str = ""
+    paystack_base_url: str = "https://api.paystack.co"
+    paystack_webhook_secret: str = ""
+    # Development-only escape hatch so tests can exercise the webhook handler.
+    # Never enable in production.
+    paystack_skip_webhook_verification: bool = False
+    # Window between DVA requery calls for the same user (seconds).
+    paystack_requery_cooldown_seconds: int = 60
 
     # Email
     mail_username: str = ""

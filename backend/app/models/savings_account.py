@@ -25,8 +25,19 @@ class SavingsAccount(Base):
     )
 
     balance: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    reserved: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_saved: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_withdrawn: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    @property
+    def available_balance(self) -> int:
+        """Spendable now — reserved funds are already removed from `balance`."""
+        return self.balance
+
+    @property
+    def total_balance(self) -> int:
+        """Ledger balance including funds locked for pending withdrawals."""
+        return self.balance + self.reserved
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

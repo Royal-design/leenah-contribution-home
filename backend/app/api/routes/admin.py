@@ -21,6 +21,7 @@ from app.repositories.user_repository import user_repository
 from app.schemas.admin import AdminStats
 from app.schemas.contribution import ContributionCreate, ContributionMemberAdd, ContributionOut, ContributionUpdate
 from app.schemas.notification import BroadcastMessageRequest, DirectMessageRequest
+from app.schemas.paystack import WithdrawalApproveRequest, WithdrawalRejectRequest
 from app.schemas.response import MessageResponse, SuccessResponse
 from app.schemas.transaction import TransactionOut
 from app.schemas.user import (
@@ -275,6 +276,39 @@ def list_all_withdrawals(
     return SuccessResponse(message="Withdrawals retrieved.", data=data)
 
 
+@router.get("/withdrawals/{withdrawal_id}", response_model=SuccessResponse[WithdrawalOut])
+def get_admin_withdrawal(
+    withdrawal_id: uuid.UUID,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = withdrawal_service.get_for_admin(db, withdrawal_id=withdrawal_id)
+    return SuccessResponse(message="Withdrawal retrieved.", data=result)
+
+
+@router.post("/withdrawals/{withdrawal_id}/approve", response_model=SuccessResponse[WithdrawalOut])
+def approve_withdrawal(
+    withdrawal_id: uuid.UUID,
+    payload: WithdrawalApproveRequest | None = None,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    reason = payload.reason if payload else None
+    withdrawal = withdrawal_service.approve(db, actor=admin, withdrawal_id=withdrawal_id, reason=reason)
+    return SuccessResponse(message="Withdrawal approved and transfer initiated.", data=WithdrawalOut.model_validate(withdrawal))
+
+
+@router.post("/withdrawals/{withdrawal_id}/reject", response_model=SuccessResponse[WithdrawalOut])
+def reject_withdrawal(
+    withdrawal_id: uuid.UUID,
+    payload: WithdrawalRejectRequest,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    withdrawal = withdrawal_service.reject(db, actor=admin, withdrawal_id=withdrawal_id, reason=payload.reason)
+    return SuccessResponse(message="Withdrawal rejected.", data=WithdrawalOut.model_validate(withdrawal))
+
+
 @router.patch("/withdrawals/{withdrawal_id}/review", response_model=SuccessResponse[WithdrawalOut])
 def review_withdrawal(
     withdrawal_id: uuid.UUID,
@@ -282,7 +316,7 @@ def review_withdrawal(
     admin: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    withdrawal = withdrawal_service.review(db, actor=admin, withdrawal_id=withdrawal_id, status=payload.status)
+    withdrawal = withdrawal_service.review(db, actor=admin, withdrawal_id=withdrawal_id, status=payload.status, reason=payload.reason)
     return SuccessResponse(message="Withdrawal reviewed.", data=WithdrawalOut.model_validate(withdrawal))
 
 

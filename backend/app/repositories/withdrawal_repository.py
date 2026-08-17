@@ -17,6 +17,16 @@ class WithdrawalRepository:
     def get(self, db: Session, withdrawal_id: uuid.UUID) -> Withdrawal | None:
         return db.get(Withdrawal, withdrawal_id)
 
+    def get_by_transfer_code(self, db: Session, transfer_code: str) -> Withdrawal | None:
+        return db.execute(
+            select(Withdrawal).where(Withdrawal.paystack_transfer_code == transfer_code)
+        ).scalar_one_or_none()
+
+    def get_by_paystack_reference(self, db: Session, reference: str) -> Withdrawal | None:
+        return db.execute(
+            select(Withdrawal).where(Withdrawal.paystack_reference == reference)
+        ).scalar_one_or_none()
+
     def list_mine(
         self,
         db: Session,

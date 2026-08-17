@@ -21,7 +21,7 @@ export interface WithdrawSavingsPayload {
 }
 
 export async function apiGetSavings(): Promise<SavingsAccount> {
-  const { data } = await api.get<RawSavingsAccount>("/api/savings/account")
+  const { data } = await api.get<RawSavingsAccount>("/api/wallet")
   return mapSavingsAccount(data)
 }
 

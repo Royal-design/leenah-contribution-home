@@ -1,9 +1,12 @@
 import type {
   AdminStats,
   AppNotification,
+  Bank,
+  BankAccount,
   Contribution,
   ContributionMember,
   ContributionScheduleEntry,
+  DVA,
   Role,
   SavingsAccount,
   SavingsGoal,
@@ -178,6 +181,8 @@ export interface RawSavingsAccount {
   id: string
   user_id: string
   balance: number
+  reserved?: number
+  total_balance?: number
   total_saved: number
   total_withdrawn: number
   created_at: string
@@ -199,8 +204,12 @@ export function mapSavingsGoal(raw: RawSavingsGoal): SavingsGoal {
 }
 
 export function mapSavingsAccount(raw: RawSavingsAccount): SavingsAccount {
+  const reserved = raw.reserved ?? 0
+  const balance = raw.balance ?? 0
   return {
-    balance: raw.balance,
+    balance,
+    reserved,
+    totalBalance: raw.total_balance ?? balance + reserved,
     totalSaved: raw.total_saved,
     totalWithdrawn: raw.total_withdrawn,
     goals: (raw.goals ?? []).map(mapSavingsGoal),
@@ -253,10 +262,21 @@ export interface RawWithdrawal {
   account_name: string | null
   destination: string
   contribution_name: string | null
-  status: "pending" | "approved" | "rejected" | "completed"
+  status: "pending" | "approved" | "processing" | "rejected" | "completed" | "failed" | "reversed"
   requested_at: string
   reviewed_by: string | null
   reviewed_at: string | null
+  masked_account_number?: string
+  processing_message?: string
+  bank_account_id?: string | null
+  paystack_recipient_code?: string | null
+  paystack_transfer_code?: string | null
+  paystack_reference?: string | null
+  admin_id?: string | null
+  approved_at?: string | null
+  completed_at?: string | null
+  rejected_at?: string | null
+  failure_reason?: string | null
 }
 
 export function mapWithdrawal(raw: RawWithdrawal): Withdrawal {
@@ -275,7 +295,17 @@ export function mapWithdrawal(raw: RawWithdrawal): Withdrawal {
     bankName: raw.bank_name,
     accountName: raw.account_name ?? undefined,
     accountNumber: raw.account_number,
+    maskedAccountNumber: raw.masked_account_number ?? undefined,
+    processingMessage: raw.processing_message ?? undefined,
     reviewedAt: raw.reviewed_at ?? undefined,
+    approvedAt: raw.approved_at ?? undefined,
+    completedAt: raw.completed_at ?? undefined,
+    rejectedAt: raw.rejected_at ?? undefined,
+    failureReason: raw.failure_reason ?? undefined,
+    bankAccountId: raw.bank_account_id ?? undefined,
+    paystackRecipientCode: raw.paystack_recipient_code ?? undefined,
+    paystackTransferCode: raw.paystack_transfer_code ?? undefined,
+    paystackReference: raw.paystack_reference ?? undefined,
   }
 }
 
@@ -378,4 +408,86 @@ export interface RawRoleSummary {
   description: string
   permissions: string[]
   user_count: number
+}
+
+/* --------------------------------- Wallet / Paystack -------------------------------- */
+
+export interface RawDVA {
+  id: string
+  user_id: string
+  paystack_customer_code: string
+  paystack_dedicated_account_id: string | null
+  account_number: string | null
+  account_name: string | null
+  bank_name: string | null
+  bank_slug: string | null
+  currency: string
+  status: "pending" | "active" | "failed" | "inactive"
+  created_at: string
+  updated_at: string
+  funding_instruction: string | null
+}
+
+export function mapDVA(raw: RawDVA): DVA {
+  return {
+    id: raw.id,
+    userId: raw.user_id,
+    paystackCustomerCode: raw.paystack_customer_code,
+    paystackDedicatedAccountId: raw.paystack_dedicated_account_id,
+    accountNumber: raw.account_number,
+    accountName: raw.account_name,
+    bankName: raw.bank_name,
+    bankSlug: raw.bank_slug,
+    currency: raw.currency,
+    status: raw.status,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+    fundingInstruction: raw.funding_instruction,
+  }
+}
+
+export interface RawBankAccount {
+  id: string
+  user_id: string
+  bank_code: string | null
+  bank_name: string
+  account_number: string
+  account_name: string | null
+  is_verified: boolean
+  is_default: boolean
+  provider_recipient_code: string | null
+  account_number_masked?: string
+  created_at: string
+}
+
+export function mapBankAccount(raw: RawBankAccount): BankAccount {
+  return {
+    id: raw.id,
+    userId: raw.user_id,
+    bankCode: raw.bank_code,
+    bankName: raw.bank_name,
+    accountNumber: raw.account_number,
+    accountName: raw.account_name,
+    isVerified: raw.is_verified,
+    isDefault: raw.is_default,
+    providerRecipientCode: raw.provider_recipient_code,
+    accountNumberMasked: raw.account_number_masked ?? `****${raw.account_number.slice(-4)}`,
+    createdAt: raw.created_at,
+  }
+}
+
+export interface RawBank {
+  name: string
+  code: string
+  slug: string
+  longcode: string | null
+}
+
+export function mapBank(raw: RawBank): Bank {
+  return {
+    name: raw.name,
+    code: raw.code,
+    slug: raw.slug,
+    longcode: raw.longcode ?? undefined,
+  }
 }

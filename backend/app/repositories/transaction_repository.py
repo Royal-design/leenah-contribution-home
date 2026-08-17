@@ -36,6 +36,23 @@ class TransactionRepository:
     def get(self, db: Session, transaction_id: uuid.UUID) -> Transaction | None:
         return db.get(Transaction, transaction_id)
 
+    def get_by_reference(self, db: Session, reference: str) -> Transaction | None:
+        return db.execute(
+            select(Transaction).where(Transaction.reference == reference)
+        ).scalar_one_or_none()
+
+    def update_status(self, db: Session, transaction_id: uuid.UUID, status: TransactionStatus) -> None:
+        transaction = db.get(Transaction, transaction_id)
+        if transaction is not None:
+            transaction.status = status
+            db.flush()
+
+    def update_details(self, db: Session, transaction_id: uuid.UUID, details: dict | None) -> None:
+        transaction = db.get(Transaction, transaction_id)
+        if transaction is not None and details is not None:
+            transaction.details = {**(transaction.details or {}), **details}
+            db.flush()
+
     def list_mine(
         self,
         db: Session,

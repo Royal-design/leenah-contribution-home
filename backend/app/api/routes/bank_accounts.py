@@ -7,6 +7,7 @@ from app.api.dependencies.auth import get_current_user
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.bank_account import UserBankAccountCreate, UserBankAccountOut, UserBankAccountUpdate
+from app.schemas.paystack import BankAccountResolveOut, BankAccountResolveRequest
 from app.schemas.response import MessageResponse, SuccessResponse
 from app.services.bank_account_service import bank_account_service
 
@@ -22,6 +23,21 @@ def list_bank_accounts(user: User = Depends(get_current_user), db: Session = Dep
     )
 
 
+@router.get("/banks")
+def list_banks(user: User = Depends(get_current_user)):
+    data = bank_account_service.list_banks()
+    return SuccessResponse(message="Banks retrieved.", data=data)
+
+
+@router.post("/resolve", response_model=SuccessResponse[BankAccountResolveOut])
+def resolve_bank_account(
+    payload: BankAccountResolveRequest,
+    user: User = Depends(get_current_user),
+):
+    result = bank_account_service.resolve(account_number=payload.account_number, bank_code=payload.bank_code)
+    return SuccessResponse(message="Account verified.", data=BankAccountResolveOut(**result))
+
+
 @router.post("", response_model=SuccessResponse[UserBankAccountOut])
 def create_bank_account(payload: UserBankAccountCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     account = bank_account_service.create(
@@ -33,7 +49,7 @@ def create_bank_account(payload: UserBankAccountCreate, user: User = Depends(get
         account_name=payload.account_name,
         is_default=payload.is_default,
     )
-    return SuccessResponse(message="Bank account saved.", data=UserBankAccountOut.model_validate(account))
+    return SuccessResponse(message="Bank account saved and verified.", data=UserBankAccountOut.model_validate(account))
 
 
 @router.patch("/{account_id}", response_model=SuccessResponse[UserBankAccountOut])

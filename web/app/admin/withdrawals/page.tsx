@@ -28,6 +28,10 @@ const statusMeta: Record<Withdrawal["status"], { label: string; className: strin
     label: "Approved",
     className: "border-transparent bg-info/15 text-info dark:bg-info/25",
   },
+  processing: {
+    label: "Processing",
+    className: "border-transparent bg-info/15 text-info dark:bg-info/25",
+  },
   rejected: {
     label: "Rejected",
     className: "border-transparent bg-destructive/15 text-destructive dark:bg-destructive/20",
@@ -35,6 +39,14 @@ const statusMeta: Record<Withdrawal["status"], { label: string; className: strin
   completed: {
     label: "Completed",
     className: "border-transparent bg-success/15 text-success dark:bg-success/20",
+  },
+  failed: {
+    label: "Failed",
+    className: "border-transparent bg-destructive/15 text-destructive dark:bg-destructive/20",
+  },
+  reversed: {
+    label: "Reversed",
+    className: "border-transparent bg-warning/15 text-warning dark:bg-warning/20",
   },
 }
 

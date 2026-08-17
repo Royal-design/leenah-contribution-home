@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.audit_log import AuditLog
     from app.models.contribution import ContributionMember
     from app.models.notification import Notification
+    from app.models.payment import Payment
     from app.models.refresh_token import RefreshToken
     from app.models.savings_account import SavingsAccount
     from app.models.support_thread import SupportThread
@@ -52,6 +53,10 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Paystack identifiers. Created lazily on first DVA/card use; never re-created.
+    paystack_customer_code: Mapped[str | None] = mapped_column(String, unique=True, index=True)
+    paystack_customer_id: Mapped[str | None] = mapped_column(String)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -74,3 +79,4 @@ class User(Base):
     bank_accounts: Mapped[list["UserBankAccount"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="actor")
     support_threads: Mapped[list["SupportThread"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    payments: Mapped[list["Payment"]] = relationship(back_populates="user", cascade="all, delete-orphan")

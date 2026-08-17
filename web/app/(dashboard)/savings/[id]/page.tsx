@@ -155,7 +155,6 @@ export default function SavingsDetailPage() {
       <FundingDialog
         open={fundOpen}
         onOpenChange={setFundOpen}
-        goalId={goal.id}
       />
 
       <EditGoalDialog

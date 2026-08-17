@@ -33,6 +33,11 @@ class UserRepository:
     def get_by_email(self, db: Session, email: str) -> User | None:
         return db.execute(select(User).where(User.email == email)).scalar_one_or_none()
 
+    def get_by_customer_code(self, db: Session, customer_code: str) -> User | None:
+        return db.execute(
+            select(User).where(User.paystack_customer_code == customer_code)
+        ).scalar_one_or_none()
+
     def list_users(
         self,
         db: Session,

@@ -29,6 +29,21 @@ class SavingsAccountRepository:
             account.total_withdrawn += amount
         db.flush()
 
+    def reserve(self, db: Session, account: SavingsAccount, amount: int) -> None:
+        account.balance -= amount
+        account.reserved += amount
+        db.flush()
+
+    def release_reserved(self, db: Session, account: SavingsAccount, amount: int) -> None:
+        account.balance += amount
+        account.reserved -= amount
+        db.flush()
+
+    def finalize_reserved(self, db: Session, account: SavingsAccount, amount: int) -> None:
+        account.reserved -= amount
+        account.total_withdrawn += amount
+        db.flush()
+
 
 class SavingsGoalRepository:
     def create(self, db: Session, *, account_id: uuid.UUID, name: str, target: int, color: str | None = None, target_date=None) -> SavingsGoal:

@@ -55,6 +55,7 @@ export function useFundSavings() {
     onSuccess: () => {
       toast.success("Savings funded successfully.")
       queryClient.invalidateQueries({ queryKey: queryKeys.savings.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallet.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.savingsGrowth })
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.recent })
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all })
@@ -70,6 +71,8 @@ export function useWithdrawSavings() {
     onSuccess: () => {
       toast.success("Withdrawal request submitted.")
       queryClient.invalidateQueries({ queryKey: queryKeys.savings.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallet.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.recent })
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all })
     },

@@ -27,6 +27,7 @@ export const userNavGroups: Array<{
     label: "Main",
     items: [
       { label: "Overview", href: "/dashboard", icon: LayoutDashboard, exact: true },
+      { label: "Wallet", href: "/wallet", icon: Wallet },
       { label: "Contributions", href: "/contributions", icon: Users },
       { label: "Savings", href: "/savings", icon: PiggyBank },
       { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
@@ -74,6 +75,7 @@ export const mobilePrimaryNav: Array<{
   icon: LucideIcon
 }> = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Wallet", href: "/wallet", icon: Wallet },
   { label: "Contributions", href: "/contributions", icon: Users },
   { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
   { label: "Profile", href: "/profile", icon: User },

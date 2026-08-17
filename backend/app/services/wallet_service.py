@@ -19,9 +19,17 @@ class WalletService:
     """Internal wallet ledger.
 
     Every financial movement must flow through here and produce a Transaction
-    record. Paystack (CARD / BANK_TRANSFER) will sit in front of `credit`;
+    record. Paystack (CARD / BANK_TRANSFER) sits in front of `credit`;
     contribution business logic calls `debit`. Nothing here talks to a payment
     provider.
+
+    Balance model:
+        balance  = funds available to spend right now
+        reserved = funds locked behind a pending withdrawal
+        total    = balance + reserved
+    Reserving moves money from `balance` into `reserved`; releasing (rejection
+    / transfer failure) moves it back; a successful payout removes it from
+    `reserved` permanently. Reserved money can never be spent.
     """
 
     def _get_account(self, db: Session, user_id: uuid.UUID) -> SavingsAccount:
@@ -45,6 +53,8 @@ class WalletService:
         description: str,
         reference: str | None = None,
         details: dict | None = None,
+        type_: TransactionType = TransactionType.FUNDING,
+        status: TransactionStatus = TransactionStatus.SUCCESSFUL,
     ) -> Transaction:
         account = self._get_account(db, user_id)
         savings_account_repository.credit(db, account, amount)
@@ -52,8 +62,8 @@ class WalletService:
         return transaction_repository.create(
             db,
             user_id=user_id,
-            type_=TransactionType.FUNDING,
-            status=TransactionStatus.SUCCESSFUL,
+            type_=type_,
+            status=status,
             amount=amount,
             description=description,
             reference=reference or make_reference("TXN"),
@@ -90,6 +100,116 @@ class WalletService:
             amount=amount,
             description=description,
             reference=reference or make_reference("TXN"),
+            details=details or {},
+        )
+
+    # ------------------------------------------------------------ reservation
+
+    def reserve(
+        self,
+        db: Session,
+        *,
+        user_id: uuid.UUID,
+        amount: int,
+        description: str,
+        reference: str | None = None,
+        details: dict | None = None,
+    ) -> Transaction:
+        """Lock `amount` for a pending withdrawal.
+
+        Available balance drops immediately; `reserved` grows. The returned
+        PENDING WITHDRAWAL transaction tracks the reserved funds until it is
+        finalised (SUCCESSFUL), released (FAILED) or reverted (REVERTED).
+        """
+        account = self._get_account(db, user_id)
+        if account.balance < amount:
+            raise AppException(
+                message="Insufficient wallet balance.",
+                status_code=400,
+                error_code="INSUFFICIENT_FUNDS",
+            )
+
+        savings_account_repository.reserve(db, account, amount)
+
+        return transaction_repository.create(
+            db,
+            user_id=user_id,
+            type_=TransactionType.WITHDRAWAL,
+            status=TransactionStatus.PENDING,
+            amount=amount,
+            description=description,
+            reference=reference or make_reference("WDL"),
+            details=details or {},
+        )
+
+    def release_reserved(
+        self,
+        db: Session,
+        *,
+        user_id: uuid.UUID,
+        amount: int,
+        txn_id: uuid.UUID | None = None,
+        description: str | None = None,
+        details: dict | None = None,
+        mark_txn: TransactionStatus = TransactionStatus.FAILED,
+    ) -> None:
+        """Return reserved funds to the available balance (reject/failure)."""
+        account = self._get_account(db, user_id)
+        savings_account_repository.release_reserved(db, account, amount)
+
+        if txn_id is not None:
+            transaction_repository.update_status(db, txn_id, mark_txn)
+            transaction_repository.update_details(db, txn_id, details)
+
+    def finalize_reserved(
+        self,
+        db: Session,
+        *,
+        user_id: uuid.UUID,
+        amount: int,
+        txn_id: uuid.UUID | None = None,
+        details: dict | None = None,
+    ) -> None:
+        """Write off reserved funds after a successful payout.
+
+        `reserved` shrinks and the pending transaction becomes SUCCESSFUL.
+        `balance` is untouched — the funds were removed from it at reserve
+        time, so the ledger never counts them twice.
+        """
+        account = self._get_account(db, user_id)
+        savings_account_repository.finalize_reserved(db, account, amount)
+
+        if txn_id is not None:
+            transaction_repository.update_status(db, txn_id, TransactionStatus.SUCCESSFUL)
+            transaction_repository.update_details(db, txn_id, details)
+
+    def revert_withdrawal(
+        self,
+        db: Session,
+        *,
+        user_id: uuid.UUID,
+        amount: int,
+        description: str,
+        reference: str | None = None,
+        details: dict | None = None,
+    ) -> Transaction:
+        """Record a reversed transfer and credit funds back to the balance.
+
+        Used when Paystack reports transfer.reversed: the money is returned to
+        us, so the user's available balance is restored and a REVERTED
+        WITHDRAWAL transaction is recorded.
+        """
+        account = self._get_account(db, user_id)
+        savings_account_repository.credit(db, account, amount)
+
+        return transaction_repository.create(
+            db,
+            user_id=user_id,
+            type_=TransactionType.WITHDRAWAL,
+            status=TransactionStatus.REVERTED,
+            amount=amount,
+            description=description,
+            reference=reference or make_reference("WDL"),
             details=details or {},
         )
 

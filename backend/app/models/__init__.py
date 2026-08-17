@@ -4,7 +4,9 @@ from app.models.contribution import Contribution
 from app.models.contribution_member import ContributionMember
 from app.models.contribution_payout import ContributionPayout
 from app.models.contribution_schedule import ContributionSchedule
+from app.models.dedicated_account import DedicatedAccount
 from app.models.notification import Notification
+from app.models.payment import Payment
 from app.models.refresh_token import RefreshToken
 from app.models.savings_account import SavingsAccount
 from app.models.savings_goal import SavingsGoal
@@ -13,6 +15,7 @@ from app.models.support_thread import SupportThread
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.models.user_bank_account import UserBankAccount
+from app.models.webhook_event import WebhookEvent
 from app.models.withdrawal import Withdrawal
 
 __all__ = [
@@ -21,7 +24,9 @@ __all__ = [
     "ContributionMember",
     "ContributionPayout",
     "ContributionSchedule",
+    "DedicatedAccount",
     "Notification",
+    "Payment",
     "RefreshToken",
     "SavingsAccount",
     "SavingsGoal",
@@ -30,6 +35,7 @@ __all__ = [
     "Transaction",
     "User",
     "UserBankAccount",
+    "WebhookEvent",
     "Withdrawal",
     "Base",
 ]

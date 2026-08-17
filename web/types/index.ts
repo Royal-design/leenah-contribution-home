@@ -91,6 +91,8 @@ export interface SavingsGoal {
 
 export interface SavingsAccount {
   balance: number
+  reserved: number
+  totalBalance: number
   totalSaved: number
   totalWithdrawn: number
   goals: SavingsGoal[]
@@ -116,7 +118,7 @@ export interface Transaction {
   }
 }
 
-export type WithdrawalStatus = "pending" | "approved" | "rejected" | "completed"
+export type WithdrawalStatus = "pending" | "approved" | "processing" | "rejected" | "completed" | "failed" | "reversed"
 
 export interface Withdrawal {
   id: string
@@ -131,7 +133,17 @@ export interface Withdrawal {
   bankName?: string
   accountName?: string
   accountNumber?: string
+  maskedAccountNumber?: string
+  processingMessage?: string
   reviewedAt?: string
+  approvedAt?: string
+  completedAt?: string
+  rejectedAt?: string
+  failureReason?: string
+  bankAccountId?: string
+  paystackRecipientCode?: string
+  paystackTransferCode?: string
+  paystackReference?: string
 }
 
 export type SupportCategory =
@@ -267,4 +279,45 @@ export interface DashboardOverview {
   }>
   recentTransactions: Transaction[]
   upcomingContribution?: Contribution
+}
+
+/* --------------------------------- Wallet / Paystack -------------------------------- */
+
+export type DVStatus = "pending" | "active" | "failed" | "inactive"
+
+export interface DVA {
+  id: string
+  userId: string
+  paystackCustomerCode: string
+  paystackDedicatedAccountId: string | null
+  accountNumber: string | null
+  accountName: string | null
+  bankName: string | null
+  bankSlug: string | null
+  currency: string
+  status: DVStatus
+  createdAt: string
+  updatedAt: string
+  fundingInstruction: string | null
+}
+
+export interface BankAccount {
+  id: string
+  userId: string
+  bankCode: string | null
+  bankName: string
+  accountNumber: string
+  accountName: string | null
+  isVerified: boolean
+  isDefault: boolean
+  providerRecipientCode: string | null
+  accountNumberMasked: string
+  createdAt: string
+}
+
+export interface Bank {
+  name: string
+  code: string
+  slug: string
+  longcode?: string
 }

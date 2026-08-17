@@ -4,6 +4,7 @@ from app.api.routes.admin import router as admin_router
 from app.api.routes.audit_logs import router as audit_logs_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.bank_accounts import router as bank_accounts_router
+from app.api.routes.config import router as config_router
 from app.api.routes.contributions import router as contributions_router
 from app.api.routes.notifications import router as notifications_router
 from app.api.routes.savings import router as savings_router
@@ -11,6 +12,7 @@ from app.api.routes.support import router as support_router
 from app.api.routes.transactions import router as transactions_router
 from app.api.routes.users import router as users_router
 from app.api.routes.wallet import router as wallet_router
+from app.api.routes.webhooks import router as webhooks_router
 from app.api.routes.withdrawals import router as withdrawals_router
 
 api_router = APIRouter()
@@ -29,6 +31,8 @@ def includes_api_routes(api: APIRouter):
     api.include_router(support_router, prefix="/api/support", tags=["Support"])
     api.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
     api.include_router(audit_logs_router, prefix="/api/audit-logs", tags=["Audit Logs"])
+    api.include_router(config_router, prefix="/api/config", tags=["Config"])
+    api.include_router(webhooks_router, prefix="/webhooks/paystack", tags=["Webhooks"])
 
 
 includes_api_routes(api_router)
