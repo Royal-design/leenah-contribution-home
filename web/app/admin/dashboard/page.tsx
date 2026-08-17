@@ -1,6 +1,6 @@
 "use client"
 
-import { Users, PiggyBank, Wallet, Clock } from "lucide-react"
+import { Users, PiggyBank, Wallet, Clock, ArrowLeftRight } from "lucide-react"
 
 import { DashboardStatCard } from "@/components/dashboard/dashboard-stat-card"
 import { PageHeader } from "@/components/shared/page-header"
@@ -39,9 +39,9 @@ export default function AdminDashboardPage() {
           tone="success"
         />
         <DashboardStatCard
-          title="Total Funds"
+          title="Total Wallet Balance"
           value={formatNaira(data.totalFunds)}
-          description="Locked across all plans"
+          description="Across all users"
           icon={Wallet}
         />
         <DashboardStatCard
@@ -53,6 +53,16 @@ export default function AdminDashboardPage() {
         />
       </section>
 
+      <section aria-label="Volume" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <DashboardStatCard
+          title="Monthly Volume"
+          value={formatNaira(data.monthlyVolume)}
+          description="Last 30 days transactions"
+          icon={ArrowLeftRight}
+          tone="info"
+        />
+      </section>
+
       <section aria-label="Charts" className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
@@ -60,7 +70,11 @@ export default function AdminDashboardPage() {
             <CardDescription>New registered users over time.</CardDescription>
           </CardHeader>
           <CardContent>
-            <GrowthBars data={data.userGrowth.map((item) => ({ label: item.month, value: item.users }))} />
+            {data.userGrowth.some((item) => item.users > 0) ? (
+              <GrowthBars data={data.userGrowth.map((item) => ({ label: item.month, value: item.users }))} />
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">No user data yet.</p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -69,11 +83,15 @@ export default function AdminDashboardPage() {
             <CardDescription>Total contribution volume each month.</CardDescription>
           </CardHeader>
           <CardContent>
-            <GrowthBars
-              data={data.contributionVolume.map((item) => ({ label: item.month, value: item.volume }))}
-              formatValue={formatNaira}
-              highlightLast
-            />
+            {data.contributionVolume.some((item) => item.volume > 0) ? (
+              <GrowthBars
+                data={data.contributionVolume.map((item) => ({ label: item.month, value: item.volume }))}
+                formatValue={formatNaira}
+                highlightLast
+              />
+            ) : (
+              <p className="py-8 text-center text-sm text-muted-foreground">No transaction data yet.</p>
+            )}
           </CardContent>
         </Card>
       </section>

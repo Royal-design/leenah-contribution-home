@@ -55,7 +55,7 @@ export function BalanceSummary({
             {formatNaira(balance)}
           </p>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Your wallet, savings and contribution funds.
+            Funds available to spend or withdraw.
           </p>
         </div>
 
@@ -75,15 +75,15 @@ export function BalanceSummary({
         </div>
 
         <div className="grid gap-2.5 sm:grid-cols-3">
-          <MiniStat icon={PiggyBank} label="Wallet" value={formatNaira(wallet ?? 0)} />
-          <MiniStat icon={Target} label="Savings" value={formatNaira(savings ?? 0)} />
+          <MiniStat icon={PiggyBank} label="In savings" value={formatNaira(savings ?? 0)} />
+          <MiniStat icon={Target} label="Lifetime saved" value={formatNaira(wallet ?? 0)} />
           <MiniStat
             icon={Users}
-            label="Active plans"
+            label="In contributions"
             value={
               activePlanCount
-                ? `${activePlanCount} · ${formatNaira(activePlanAmount ?? 0)}`
-                : "0 plans"
+                ? `${activePlanCount} plan${activePlanCount > 1 ? "s" : ""} · ${formatNaira(activePlanAmount ?? 0)}`
+                : "No plans"
             }
           />
         </div>

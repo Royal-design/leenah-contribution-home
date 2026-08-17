@@ -101,21 +101,25 @@ def _monthly_series(db: Session, *, model, date_col: str, months: int) -> list[d
 
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=months * 31)
-    counts = dict(
-        db.execute(
-            select(func.date_trunc("month", getattr(model, date_col)), func.count(model.id))
-            .where(getattr(model, date_col) >= cutoff)
-            .group_by(func.date_trunc("month", getattr(model, date_col)))
-        ).all()
-    )
+    rows = db.execute(
+        select(func.date_trunc("month", getattr(model, date_col)), func.count(model.id))
+        .where(getattr(model, date_col) >= cutoff)
+        .group_by(func.date_trunc("month", getattr(model, date_col)))
+    ).all()
+    counts = {}
+    for dt_val, count in rows:
+        # Normalize to year-month string for reliable matching
+        key = dt_val.strftime("%Y-%m") if hasattr(dt_val, "strftime") else str(dt_val)[:7]
+        counts[key] = count
 
     series = []
     for i in range(months - 1, -1, -1):
         month_start = (now.replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(days=31 * i)).replace(day=1)
+        key = month_start.strftime("%Y-%m")
         series.append(
             {
                 "month": month_start.strftime("%b"),
-                "users": counts.get(month_start, 0),
+                "users": counts.get(key, 0),
             }
         )
     return series
@@ -134,12 +138,16 @@ def _transaction_volume(db: Session, *, months: int) -> list[dict]:
         .where(Transaction.status == TransactionStatus.SUCCESSFUL, Transaction.date >= cutoff)
         .group_by(func.date_trunc("month", Transaction.date))
     ).all()
-    volumes = {month: amount for month, amount in rows}
+    volumes = {}
+    for dt_val, amount in rows:
+        key = dt_val.strftime("%Y-%m") if hasattr(dt_val, "strftime") else str(dt_val)[:7]
+        volumes[key] = amount or 0
 
     series = []
     for i in range(months - 1, -1, -1):
         month_start = (now.replace(day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(days=31 * i)).replace(day=1)
-        series.append({"month": month_start.strftime("%b"), "volume": volumes.get(month_start, 0)})
+        key = month_start.strftime("%Y-%m")
+        series.append({"month": month_start.strftime("%b"), "volume": volumes.get(key, 0)})
     return series
 
 

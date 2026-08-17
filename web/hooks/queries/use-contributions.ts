@@ -20,14 +20,14 @@ import { getErrorMessage } from "@/lib/api/types"
 
 export function useContributions(params?: ContributionListQuery) {
   return useQuery({
-    queryKey: queryKeys.contributions.all,
+    queryKey: [...queryKeys.contributions.all, params],
     queryFn: () => apiGetContributions(params),
   })
 }
 
 export function useOpenContributions(params?: { page?: number; pageSize?: number }) {
   return useQuery({
-    queryKey: queryKeys.contributions.open,
+    queryKey: [...queryKeys.contributions.open, params],
     queryFn: () => apiGetOpenContributions(params),
   })
 }

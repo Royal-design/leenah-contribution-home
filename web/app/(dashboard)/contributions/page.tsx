@@ -25,12 +25,42 @@ import type { Contribution } from "@/types"
 
 const PAGE_SIZE = 9
 
-type ContributionsTab = "joined" | "available"
+type ContributionsTab = "active" | "upcoming" | "completed" | "open-active" | "open-upcoming"
+
+function ContributionGrid({
+  items,
+  emptyTitle,
+  emptyDescription,
+  emptyAction,
+}: {
+  items: Contribution[]
+  emptyTitle: string
+  emptyDescription: string
+  emptyAction?: { label: string; onAction: () => void }
+}) {
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        title={emptyTitle}
+        description={emptyDescription}
+        action={emptyAction}
+      />
+    )
+  }
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {items.map((contribution) => (
+        <ContributionCard key={contribution.id} contribution={contribution} />
+      ))}
+    </div>
+  )
+}
 
 export default function ContributionsPage() {
   const router = useRouter()
   const currentUserId = useAuthStore((state) => state.user?.id)
-  const [tab, setTab] = React.useState<ContributionsTab>("joined")
+  const [tab, setTab] = React.useState<ContributionsTab>("active")
   const [page, setPage] = React.useState(1)
 
   const joined = useContributions({ page, pageSize: PAGE_SIZE })
@@ -51,16 +81,21 @@ export default function ContributionsPage() {
       !plan.members.some((member) => member.userId === currentUserId)
   )
 
-  const groups: Array<{ label: string; items: Contribution[] }> = [
-    { label: "Active", items: joinedItems.filter((c) => c.status === "active") },
-    { label: "Upcoming", items: joinedItems.filter((c) => c.status === "upcoming") },
-    { label: "Completed", items: joinedItems.filter((c) => c.status === "completed") },
-  ]
+  const activeItems = joinedItems.filter((c) => c.status === "active")
+  const upcomingItems = joinedItems.filter((c) => c.status === "upcoming")
+  const completedItems = joinedItems.filter((c) => c.status === "completed")
+  const openActiveItems = availableItems.filter((c) => c.status === "active")
+  const openUpcomingItems = availableItems.filter((c) => c.status === "upcoming")
 
   function handleJoin(planId: string) {
     joinContribution.mutate(planId, {
       onSuccess: () => router.push(`/contributions/${planId}`),
     })
+  }
+
+  function switchTab(value: string) {
+    setPage(1)
+    setTab(value as ContributionsTab)
   }
 
   return (
@@ -69,110 +104,123 @@ export default function ContributionsPage() {
         title="Contributions"
         description="Join contribution circles and track your progress."
       >
-        <Button
-          size="sm"
-          onClick={() => {
-            setTab("available")
-            setPage(1)
-          }}
-        >
+        <Button size="sm" onClick={() => switchTab("open-active")}>
           <Plus />
           Join a contribution
         </Button>
       </PageHeader>
 
-      <Tabs
-        value={tab}
-        onValueChange={(value) => {
-          setPage(1)
-          setTab((value as ContributionsTab) ?? "joined")
-        }}
-      >
+      <Tabs value={tab} onValueChange={switchTab}>
         <TabsList>
-          <TabsTrigger value="joined">
-            Joined
-            {joinedItems.length > 0 && (
-              <span className="ml-1 text-muted-foreground">{joinedItems.length}</span>
+          <TabsTrigger value="active">
+            Active
+            {activeItems.length > 0 && (
+              <span className="ml-1 text-muted-foreground">{activeItems.length}</span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="available">
-            Available
-            {availableItems.length > 0 && (
-              <span className="ml-1 text-muted-foreground">{availableItems.length}</span>
+          <TabsTrigger value="upcoming">
+            Upcoming
+            {upcomingItems.length > 0 && (
+              <span className="ml-1 text-muted-foreground">{upcomingItems.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="completed">
+            Completed
+            {completedItems.length > 0 && (
+              <span className="ml-1 text-muted-foreground">{completedItems.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="open-active">
+            Open Active
+            {openActiveItems.length > 0 && (
+              <span className="ml-1 text-muted-foreground">{openActiveItems.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="open-upcoming">
+            Open Upcoming
+            {openUpcomingItems.length > 0 && (
+              <span className="ml-1 text-muted-foreground">{openUpcomingItems.length}</span>
             )}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="joined" className="mt-6 flex flex-col gap-8">
-          {joinedItems.length === 0 && (
+        <TabsContent value="active" className="mt-6">
+          <ContributionGrid
+            items={activeItems}
+            emptyTitle="No active contributions"
+            emptyDescription="You don't have any running contributions right now."
+            emptyAction={{ label: "Browse available plans", onAction: () => switchTab("open-active") }}
+          />
+        </TabsContent>
+
+        <TabsContent value="upcoming" className="mt-6">
+          <ContributionGrid
+            items={upcomingItems}
+            emptyTitle="No upcoming contributions"
+            emptyDescription="You don't have any contributions scheduled to start yet."
+            emptyAction={{ label: "Browse available plans", onAction: () => switchTab("open-upcoming") }}
+          />
+        </TabsContent>
+
+        <TabsContent value="completed" className="mt-6">
+          <ContributionGrid
+            items={completedItems}
+            emptyTitle="No completed contributions"
+            emptyDescription="You haven't completed any contributions yet."
+          />
+        </TabsContent>
+
+        <TabsContent value="open-active" className="mt-6">
+          {openActiveItems.length === 0 ? (
             <EmptyState
-              title="You haven't joined any contributions yet"
-              description="Open the Available tab to find plans you can join."
-              action={{
-                label: "Browse available plans",
-                onAction: () => {
-                  setTab("available")
-                  setPage(1)
-                },
-              }}
+              title="No active plans to join"
+              description="There are no running contribution plans open for joining right now."
             />
-          )}
-
-          {groups
-            .filter((group) => group.items.length > 0)
-            .map((group) => (
-              <section key={group.label} aria-label={group.label}>
-                <h2 className="font-heading text-lg font-medium tracking-tight">
-                  {group.label}
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">
-                    {group.items.length}
-                  </span>
-                </h2>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {group.items.map((contribution) => (
-                    <ContributionCard
-                      key={contribution.id}
-                      contribution={contribution}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-
-          {joinedItems.length > 0 && (
-            <Pagination
-              page={joined.data?.page ?? 1}
-              totalPages={joined.data?.totalPages ?? 1}
-              onPageChange={setPage}
-            />
+          ) : (
+            <div className="flex flex-col gap-6">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {openActiveItems.map((plan) => (
+                  <AvailablePlanCard
+                    key={plan.id}
+                    plan={plan}
+                    joining={joiningId === plan.id}
+                    onJoin={() => handleJoin(plan.id)}
+                  />
+                ))}
+              </div>
+              <Pagination
+                page={available.data?.page ?? 1}
+                totalPages={available.data?.totalPages ?? 1}
+                onPageChange={setPage}
+              />
+            </div>
           )}
         </TabsContent>
 
-        <TabsContent value="available" className="mt-6 flex flex-col gap-6">
-          {availableItems.length === 0 ? (
+        <TabsContent value="open-upcoming" className="mt-6">
+          {openUpcomingItems.length === 0 ? (
             <EmptyState
-              title="No available plans"
-              description="There are no open contribution plans right now. Check back soon."
+              title="No upcoming plans to join"
+              description="There are no upcoming contribution plans open for joining right now."
             />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {availableItems.map((plan) => (
-                <AvailablePlanCard
-                  key={plan.id}
-                  plan={plan}
-                  joining={joiningId === plan.id}
-                  onJoin={() => handleJoin(plan.id)}
-                />
-              ))}
+            <div className="flex flex-col gap-6">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {openUpcomingItems.map((plan) => (
+                  <AvailablePlanCard
+                    key={plan.id}
+                    plan={plan}
+                    joining={joiningId === plan.id}
+                    onJoin={() => handleJoin(plan.id)}
+                  />
+                ))}
+              </div>
+              <Pagination
+                page={available.data?.page ?? 1}
+                totalPages={available.data?.totalPages ?? 1}
+                onPageChange={setPage}
+              />
             </div>
-          )}
-
-          {availableItems.length > 0 && (
-            <Pagination
-              page={available.data?.page ?? 1}
-              totalPages={available.data?.totalPages ?? 1}
-              onPageChange={setPage}
-            />
           )}
         </TabsContent>
       </Tabs>

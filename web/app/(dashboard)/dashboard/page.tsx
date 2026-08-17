@@ -61,10 +61,6 @@ export default function DashboardPage() {
   )
   const totalBalance = (savings.data?.balance ?? 0) + totalContributions
 
-  const monthlyInflow = (recentTxns.data ?? [])
-    .filter((txn) => txn.type !== "withdrawal")
-    .reduce((sum, txn) => sum + txn.amount, 0)
-
   const next = contributionItems
     .filter((contribution) => contribution.status !== "completed")
     .sort(
@@ -87,9 +83,9 @@ export default function DashboardPage() {
       {/* 1. Financial summary */}
       <section aria-label="Financial summary">
         <BalanceSummary
-          balance={totalBalance}
-          wallet={savings.data?.balance ?? 0}
-          savings={savings.data?.totalSaved ?? 0}
+          balance={savings.data?.balance ?? 0}
+          wallet={savings.data?.totalSaved ?? 0}
+          savings={savings.data?.totalWithdrawn ?? 0}
           activePlanCount={activeContributionsList.length}
           activePlanAmount={totalContributions}
           onDeposit={() => setFundingOpen(true)}
@@ -101,17 +97,18 @@ export default function DashboardPage() {
       <section aria-label="Financial health">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <DashboardStatCard
-            title="Protected funds"
-            value={formatNaira(savings.data?.totalSaved ?? 0)}
-            description="Locked savings"
+            title="Reserved"
+            value={formatNaira(savings.data?.reserved ?? 0)}
+            description="Locked for pending withdrawals"
             icon={PiggyBank}
-            tone="success"
+            tone="warning"
           />
           <DashboardStatCard
-            title="Monthly inflow"
-            value={formatNaira(monthlyInflow)}
-            description="Recent additions"
+            title="Lifetime saved"
+            value={formatNaira(savings.data?.totalSaved ?? 0)}
+            description="Total savings made"
             icon={Wallet}
+            tone="success"
           />
           <DashboardStatCard
             title="Next contribution"
@@ -125,7 +122,7 @@ export default function DashboardPage() {
             tone="warning"
           />
           <DashboardStatCard
-            title="Active contributions"
+            title="In contributions"
             value={formatNaira(totalContributions)}
             description={`${activeContributionsList.length} active ${activeContributionsList.length === 1 ? "plan" : "plans"}`}
             icon={Users}
