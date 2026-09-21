@@ -12,6 +12,7 @@ import {
   apiAdminListTransactions,
   apiAdminListWithdrawals,
   apiAdminRemoveContributionMember,
+  apiAdminSetContributionMemberPosition,
   apiAdminUpdateContribution,
   apiBulkCreateUsers,
   apiDeleteUser,
@@ -240,6 +241,28 @@ export function useAdminRemoveContributionMember() {
       toast.success("Member removed.")
       queryClient.invalidateQueries({ queryKey: queryKeys.adminContributions.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.adminContributions.detail(updated.id) })
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  })
+}
+
+export function useAdminSetContributionMemberPosition() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      contributionId,
+      userId,
+      position,
+    }: {
+      contributionId: string
+      userId: string
+      position: number
+    }) => apiAdminSetContributionMemberPosition(contributionId, userId, position),
+    onSuccess: (updated) => {
+      toast.success("Rotation updated.")
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminContributions.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminContributions.detail(updated.id) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.contributions.all })
     },
     onError: (error: Error) => toast.error(getErrorMessage(error)),
   })

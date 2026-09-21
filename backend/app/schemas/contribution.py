@@ -12,6 +12,7 @@ from app.models.enums import (
     ScheduleStatus,
     WithdrawalRuleType,
 )
+from app.utils.dates import start_date_in_past
 
 
 class ContributionCreate(BaseModel):
@@ -34,6 +35,8 @@ class ContributionCreate(BaseModel):
     def _validate_dates(self) -> "ContributionCreate":
         if self.end_date is not None and self.end_date < self.start_date:
             raise ValueError("end_date must be on or after start_date")
+        if start_date_in_past(self.start_date):
+            raise ValueError("start_date cannot be in the past")
         return self
 
 
@@ -143,3 +146,7 @@ class PayContributionRequest(BaseModel):
 
 class ContributionMemberAdd(BaseModel):
     user_id: uuid.UUID
+
+
+class ContributionMemberPositionUpdate(BaseModel):
+    position: int = Field(ge=1)

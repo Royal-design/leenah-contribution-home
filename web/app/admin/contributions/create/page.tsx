@@ -95,6 +95,13 @@ const formSchema = z
         message: "Start date cannot be in the past.",
       })
     }
+    if (data.memberCount > data.rounds) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["memberCount"],
+        message: `A plan supports one withdrawal position per round. Use ${data.rounds} or fewer participants.`,
+      })
+    }
   })
 
 type FormValues = z.infer<typeof formSchema>
@@ -349,6 +356,15 @@ export default function CreateContributionPage() {
                     />
                   </Field>
                 </div>
+
+                <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
+                  Rotation:{" "}
+                  <span className="font-medium text-foreground">
+                    {Math.min(Number(watched.memberCount) || 0, Number(watched.rounds) || 0)}
+                  </span>{" "}
+                  withdrawal position(s) available — one per contribution round. Members are
+                  assigned positions in the order they join.
+                </p>
               </FieldGroup>
             </CardContent>
           </Card>
@@ -570,6 +586,12 @@ function PreviewSummary({
         <div>
           <p className="text-muted-foreground">Members</p>
           <p className="font-medium">{members}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Withdrawal positions</p>
+          <p className="font-medium">
+            {Math.min(members, rounds) || 0} (one per round)
+          </p>
         </div>
         <Separator className="my-1" />
         <p className="text-xs text-muted-foreground">

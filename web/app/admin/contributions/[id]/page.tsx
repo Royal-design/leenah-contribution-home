@@ -3,7 +3,16 @@
 import * as React from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { ChevronLeft, Search, Pencil, Trash2, UserPlus, X } from "lucide-react"
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  Search,
+  Pencil,
+  Trash2,
+  UserPlus,
+  X,
+} from "lucide-react"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { StatusBadge } from "@/components/shared/status-badge"
@@ -19,11 +28,13 @@ import {
   useAdminContribution,
   useAdminDeleteContribution,
   useAdminRemoveContributionMember,
+  useAdminSetContributionMemberPosition,
   useAdminUsers,
 } from "@/hooks/queries/use-admin"
-import { formatDate, formatNaira, getInitials } from "@/lib/format"
+import { formatDate, formatMonthYear, formatNaira, getInitials } from "@/lib/format"
+import { planHasStarted } from "@/lib/dates"
 import { cn } from "@/lib/utils"
-import type { ContributionMember, User } from "@/types"
+import type { ContributionMember, ContributionPayout, User } from "@/types"
 
 function AddMemberDialog({
   open,
@@ -142,6 +153,7 @@ export default function AdminContributionDetailPage() {
   const { data: contribution, isPending } = useAdminContribution(id)
   const deleteContribution = useAdminDeleteContribution()
   const removeMember = useAdminRemoveContributionMember()
+  const setPosition = useAdminSetContributionMemberPosition()
 
   const [addOpen, setAddOpen] = React.useState(false)
   const [pendingDelete, setPendingDelete] = React.useState(false)
@@ -167,6 +179,15 @@ export default function AdminContributionDetailPage() {
       </div>
     )
   }
+
+  const payoutsById = new Map(
+    (contribution.payouts ?? []).map((payout) => [payout.memberId, payout])
+  )
+  const rotationLocked =
+    planHasStarted(contribution.startDate) ||
+    contribution.status === "active" ||
+    contribution.status === "completed" ||
+    contribution.totalContributed > 0
 
   return (
     <div className="flex flex-col gap-8">
@@ -230,10 +251,19 @@ export default function AdminContributionDetailPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Withdrawal</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">Rotation</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-semibold">{formatDate(contribution.withdrawalDate)}</p>
+            <p className="text-2xl font-semibold tabular-nums">
+              {contribution.members.length}
+              <span className="text-sm font-normal text-muted-foreground">
+                {" "}
+                / {contribution.memberCount} positions
+              </span>
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {rotationLocked ? "Order locked — the cycle has begun." : "Order editable before the plan starts."}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -273,43 +303,123 @@ export default function AdminContributionDetailPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Members</CardTitle>
-            <CardDescription>People in this circle.</CardDescription>
+            <CardTitle>Rotation order</CardTitle>
+            <CardDescription>
+              First-come, first-served. Position {contribution.members.length > 0 ? contribution.members.length : "\u2026"} determines the withdrawal round.
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            {contribution.members.map((member) => (
-              <div
-                key={member.id}
-                className="flex items-center justify-between gap-3 border-b py-2.5 text-sm last:border-0"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <Avatar size="sm">
-                    <AvatarFallback>{getInitials(member.name)}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{member.name}</p>
-                    <p className="text-xs text-muted-foreground">Position {member.position}</p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="tabular-nums text-muted-foreground">
-                    {formatNaira(member.totalContributed)}
-                  </span>
-                  {member.userId !== contribution.createdBy && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Remove ${member.name}`}
-                      onClick={() => setPendingRemove(member)}
+          <CardContent className="flex flex-col gap-2">
+            {contribution.members.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No participants yet. Use &quot;Add member&quot; to enroll the first participant.
+              </p>
+            ) : (
+              <div className="flex flex-col">
+                {contribution.members.map((member, index) => {
+                  const payout = payoutsById.get(member.id) as ContributionPayout | undefined
+                  const isFirst = index === 0
+                  const isLast = index === contribution.members.length - 1
+                  return (
+                    <div
+                      key={member.id}
+                      className="flex flex-wrap items-center justify-between gap-3 border-b py-3 text-sm last:border-0"
                     >
-                      <X className="text-destructive" />
-                    </Button>
-                  )}
-                </div>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          className={cn(
+                            "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
+                            payout?.status === "paid"
+                              ? "bg-success/15 text-success"
+                              : "bg-primary/10 text-primary"
+                          )}
+                        >
+                          {member.position}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{member.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Joined{" "}
+                            {member.joinedAt ? formatDate(member.joinedAt) : "—"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col items-end">
+                          <span className="text-xs text-muted-foreground">
+                            Withdrawal:{" "}
+                            <span className="font-medium text-foreground">
+                              {payout ? formatMonthYear(payout.scheduledDate) : "—"}
+                            </span>
+                          </span>
+                          {payout && (
+                            <span
+                              className={cn(
+                                "mt-0.5 rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+                                payout.status === "paid"
+                                  ? "bg-success/15 text-success"
+                                  : payout.status === "skipped"
+                                    ? "bg-destructive/10 text-destructive"
+                                    : "bg-muted text-muted-foreground"
+                              )}
+                            >
+                              {payout.status}
+                            </span>
+                          )}
+                        </div>
+
+                        {!rotationLocked && (
+                          <div className="flex items-center gap-0.5">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Move ${member.name} up`}
+                              disabled={isFirst || setPosition.isPending}
+                              onClick={() =>
+                                setPosition.mutate({
+                                  contributionId: id,
+                                  userId: member.userId ?? "",
+                                  position: member.position - 1,
+                                })
+                              }
+                            >
+                              <ArrowUp />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Move ${member.name} down`}
+                              disabled={isLast || setPosition.isPending}
+                              onClick={() =>
+                                setPosition.mutate({
+                                  contributionId: id,
+                                  userId: member.userId ?? "",
+                                  position: member.position + 1,
+                                })
+                              }
+                            >
+                              <ArrowDown />
+                            </Button>
+                            {member.userId !== contribution.createdBy && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Remove ${member.name}`}
+                                onClick={() => setPendingRemove(member)}
+                              >
+                                <X className="text-destructive" />
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
       </div>

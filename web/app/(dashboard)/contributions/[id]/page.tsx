@@ -16,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { FundContributionDialog } from "@/components/forms/fund-contribution-dialog"
 import { useContribution, useJoinContribution, useLeaveContribution } from "@/hooks/queries/use-contributions"
 import { useAuthStore } from "@/stores/auth-store"
-import { formatDate, formatLongDate, formatNaira, getInitials } from "@/lib/format"
+import { formatDate, formatLongDate, formatMonthYear, formatNaira, getInitials } from "@/lib/format"
 import { planHasStarted } from "@/lib/dates"
 import { cn } from "@/lib/utils"
 
@@ -64,6 +64,14 @@ export default function ContributionDetailPage() {
   const currentMember = contribution.members.find(
     (member) => member.userId === currentUserId
   )
+
+  const myPayout = (contribution.payouts ?? []).find(
+    (payout) => payout.memberId === currentMember?.id
+  )
+  const paidCount = contribution.schedule.filter((entry) => entry.status === "paid").length
+  const withdrawPaid = myPayout?.status === "paid"
+  const myWithdrawalDate = myPayout?.scheduledDate
+  const withdrawSoon = myWithdrawalDate ? isUpcomingSoon(myWithdrawalDate) : false
 
   return (
     <div className="flex flex-col gap-8">
@@ -152,11 +160,15 @@ export default function ContributionDetailPage() {
               </div>
               <div>
                 <dt className="text-muted-foreground">Ends</dt>
-                <dd className="font-medium">{formatDate(contribution.endDate)}</dd>
+                <dd className="font-medium">
+                  {contribution.endDate ? formatDate(contribution.endDate) : "—"}
+                </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Next payment</dt>
-                <dd className="font-medium">{formatDate(contribution.nextPaymentDate)}</dd>
+                <dd className="font-medium">
+                  {contribution.nextPaymentDate ? formatDate(contribution.nextPaymentDate) : "—"}
+                </dd>
               </div>
             </dl>
           </CardContent>
@@ -166,40 +178,87 @@ export default function ContributionDetailPage() {
           <CardHeader>
             <CardTitle>Withdrawal</CardTitle>
             <CardDescription>
-              {withdrawalAvailable
-                ? "Your share is available to withdraw now."
-                : `Available from ${formatLongDate(contribution.withdrawalDate)}`}
+              {!currentMember
+                ? "Join this plan to see your withdrawal position and date."
+                : withdrawPaid
+                  ? "Your payout has been paid into your wallet."
+                  : `Due ${myWithdrawalDate ? formatLongDate(myWithdrawalDate) : "—"} — position ${currentMember.position} in the rotation`}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div
               className={cn(
                 "rounded-lg border p-4",
-                withdrawalAvailable
-                  ? "border-success/30 bg-success/10"
-                  : isUpcomingSoon(contribution.withdrawalDate)
-                    ? "border-warning/30 bg-warning/10"
-                    : "bg-muted/40"
+                !currentMember || !myWithdrawalDate
+                  ? "bg-muted/40"
+                  : withdrawPaid
+                    ? "border-success/30 bg-success/10"
+                    : withdrawSoon
+                      ? "border-warning/30 bg-warning/10"
+                      : "bg-muted/40"
               )}
             >
-              <p
-                className={cn(
-                  "text-sm font-medium",
-                  withdrawalAvailable && "text-success"
-                )}
-              >
-                {withdrawalAvailable
-                  ? "Eligible — withdrawal is currently available."
-                  : `Withdrawal available on ${formatLongDate(contribution.withdrawalDate)}`}
+              <p className={cn("text-sm font-medium", withdrawPaid && "text-success")}>
+                {!currentMember
+                  ? "You haven't joined this contribution yet."
+                  : withdrawPaid
+                    ? "Eligible — your payout is available in your wallet."
+                    : `Your withdrawal opens on ${
+                        myWithdrawalDate ? formatLongDate(myWithdrawalDate) : "—"
+                      }`}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {contribution.withdrawalRule.note ??
-                  "Payouts are sent to your registered bank account."}
+                  "Withdrawal dates follow your rotation position. Payouts are sent to your registered bank account."}
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {currentMember && (
+        <Card className="border-primary/30 bg-primary/[0.04]">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 py-5">
+            <div className="flex items-center gap-4">
+              <span
+                className="flex size-12 items-center justify-center rounded-full bg-primary text-sm font-bold tabular-nums text-primary-foreground"
+              >
+                #{currentMember.position}
+              </span>
+              <div>
+                <p className="font-heading font-medium">My contribution position</p>
+                <p className="text-sm text-muted-foreground">
+                  Position {currentMember.position} of {contribution.memberCount} ·{" "}
+                  {paidCount} / {contribution.rounds} contributions paid
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col items-start gap-1 sm:items-end">
+              <p className="text-sm text-muted-foreground">Expected withdrawal</p>
+              <div className="flex items-center gap-2">
+                <p className="text-lg font-semibold">
+                  {myPayout ? formatMonthYear(myPayout.scheduledDate) : "—"}
+                </p>
+                {myPayout && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "border-transparent capitalize",
+                      myPayout.status === "paid"
+                        ? "bg-success/15 text-success"
+                        : myPayout.status === "skipped"
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {myPayout.status}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

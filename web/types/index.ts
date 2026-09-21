@@ -44,6 +44,7 @@ export interface ContributionMember {
   avatar?: string
   position: number
   totalContributed: number
+  joinedAt?: string
 }
 
 export interface ContributionScheduleEntry {
@@ -53,6 +54,20 @@ export interface ContributionScheduleEntry {
   dueDate: string
   status: "paid" | "pending" | "upcoming"
   amount: number
+}
+
+export type PayoutStatus = "pending" | "paid" | "skipped"
+
+export interface ContributionPayout {
+  id: string
+  contributionId: string
+  memberId: string
+  roundNumber: number
+  scheduledDate: string
+  amount: number
+  status: PayoutStatus
+  paidAt?: string
+  transactionId?: string
 }
 
 export interface WithdrawalRule {
@@ -80,6 +95,7 @@ export interface Contribution {
   lastPaymentDate?: string
   members: ContributionMember[]
   schedule: ContributionScheduleEntry[]
+  payouts?: ContributionPayout[]
   withdrawalRule: WithdrawalRule
   currentUserPosition?: number
   organization?: string

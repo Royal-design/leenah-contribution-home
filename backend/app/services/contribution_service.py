@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import uuid
 
 from sqlalchemy import select
@@ -14,6 +14,7 @@ from app.models.enums import (
     FundingMethod,
     MemberStatus,
     NotificationType,
+    PayoutStatus,
     ScheduleStatus,
     TransactionType,
 )
@@ -34,14 +35,13 @@ from app.schemas.contribution import (
 )
 from app.services.notification_service import notification_service
 from app.services.wallet_service import make_reference, wallet_service
-from app.utils.dates import add_months, end_date_from_duration, period_dates, start_date_in_past
-
-FREQUENCY_DAYS = {
-    "weekly": 7,
-    "biweekly": 14,
-    "monthly": 30,
-    "custom": 30,
-}
+from app.utils.dates import (
+    end_date_from_duration,
+    payout_date_at,
+    period_dates,
+    start_date_change_forbidden,
+    start_date_in_past,
+)
 
 
 def _utcnow() -> datetime:
@@ -134,6 +134,17 @@ class ContributionService:
         contribution.members = contribution_member_repository.list_members(db, contribution.id)
         contribution.payouts = contribution_payout_repository.list_for_contribution(db, contribution.id)
 
+    def _reconcile_payout_dates(self, db: Session, contribution: Contribution) -> None:
+        """Bring stored payout dates in line with the derived rotation schedule.
+
+        The withdrawal date follows deterministically from the plan start,
+        frequency and member position (monthly plans pay at the end of each
+        month). This re-syncs pre-existing memberships that may still hold an
+        older date, so displayed withdrawal dates are always correct.
+        """
+        for member in contribution_member_repository.list_active(db, contribution.id):
+            self._sync_member_payout(db, contribution, member)
+
     def _recompute_totals(self, db: Session, contribution: Contribution) -> None:
         active = [m for m in contribution.members if m.status == MemberStatus.ACTIVE]
         active_member_ids = {m.id for m in active}
@@ -186,6 +197,16 @@ class ContributionService:
                 message="Start date cannot be in the past.",
                 status_code=422,
                 error_code="START_DATE_IN_PAST",
+            )
+
+        if payload.member_count > payload.rounds:
+            raise AppException(
+                message=(
+                    "A contribution plan supports one withdrawal position per "
+                    f"contribution round. Reduce participants below or equal to {payload.rounds}."
+                ),
+                status_code=422,
+                error_code="CAPACITY_EXCEEDS_ROUNDS",
             )
 
         contribution = contribution_repository.create(
@@ -246,6 +267,7 @@ class ContributionService:
         contribution = contribution_repository.get(db, contribution_id)
         if contribution is None:
             raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+        self._reconcile_payout_dates(db, contribution)
         self._sync_schedule(db, contribution)
         member_id = self._member_id_for(db, contribution_id, user.id)
         return self._build_out(contribution, member_id=member_id)
@@ -285,6 +307,26 @@ class ContributionService:
 
     def _apply_update(self, db: Session, contribution: Contribution, payload) -> None:
         data = payload.model_dump(exclude_unset=True)
+
+        if "start_date" in data and data["start_date"] is not None:
+            if start_date_change_forbidden(data["start_date"], contribution.start_date):
+                raise AppException(
+                    message="Start date cannot be in the past.",
+                    status_code=422,
+                    error_code="START_DATE_IN_PAST",
+                )
+
+        if "member_count" in data and data["member_count"] is not None:
+            effective_rounds = data.get("rounds") or contribution.rounds
+            if data["member_count"] > effective_rounds:
+                raise AppException(
+                    message=(
+                        "A contribution plan supports one withdrawal position per "
+                        f"contribution round. Use {effective_rounds} or fewer participants."
+                    ),
+                    status_code=422,
+                    error_code="CAPACITY_EXCEEDS_ROUNDS",
+                )
 
         if "withdrawal_date" in data:
             withdrawal_date = data.pop("withdrawal_date")
@@ -410,43 +452,53 @@ class ContributionService:
         if member_schedules:
             contribution_member_repository.set_next_payment_date(db, member, member_schedules[0].due_date)
 
-        rule = contribution.withdrawal_rule or {}
-        existing_payouts = contribution_payout_repository.list_for_member(db, contribution.id, member.id)
-        if existing_payouts:
-            return
+        self._sync_member_payout(db, contribution, member)
 
+    def _payout_date_for(self, contribution: Contribution, position: int) -> datetime:
+        """Withdrawal date for a member holding ``position`` in the rotation."""
+        rule = contribution.withdrawal_rule or {}
         if rule.get("type") == "fixed_date":
-            target_date = contribution.withdrawal_date or (
-                dates[-1] if dates else contribution.start_date
+            return contribution.withdrawal_date or payout_date_at(
+                contribution.start_date, contribution.frequency.value, position
             )
-            contribution_payout_repository.create(
-                db,
-                contribution_id=contribution.id,
-                member_id=member.id,
-                round_number=contribution.rounds if contribution.rounds else 1,
-                scheduled_date=target_date,
-                amount=contribution.amount * contribution.member_count,
-            )
+        return payout_date_at(contribution.start_date, contribution.frequency.value, position)
+
+    def _sync_member_payout(
+        self,
+        db: Session,
+        contribution: Contribution,
+        member: ContributionMember,
+        position: int | None = None,
+    ) -> None:
+        """Create or move a member's single (rotational) payout to a position.
+
+        Idempotent: re-syncs the payout when a position changes so the
+        withdrawal schedule always matches the current rotation order.
+        """
+        position = position or member.position
+        scheduled_date = self._payout_date_for(contribution, position)
+        payouts = contribution_payout_repository.list_for_member(db, contribution.id, member.id)
+        if payouts:
+            payout = payouts[0]
+            payout.round_number = position
+            payout.scheduled_date = scheduled_date
         else:
-            round_number = member.payout_position or member.position
-            if contribution.frequency.value in ("weekly", "biweekly"):
-                step = timedelta(days=FREQUENCY_DAYS.get(contribution.frequency.value, 30))
-                scheduled_date = contribution.start_date + step * (round_number - 1)
-            else:
-                scheduled_date = add_months(contribution.start_date, round_number - 1)
             contribution_payout_repository.create(
                 db,
                 contribution_id=contribution.id,
                 member_id=member.id,
-                round_number=round_number,
+                round_number=position,
                 scheduled_date=scheduled_date,
                 amount=contribution.amount * contribution.member_count,
             )
+        db.flush()
 
     # ------------------------------------------------------------- membership
 
     def _join_member(self, db: Session, *, user: User, contribution_id: uuid.UUID) -> ContributionOut:
-        contribution = contribution_repository.get(db, contribution_id)
+        # Lock the contribution row so concurrent joins serialize and the
+        # "next available position" can never be handed out twice.
+        contribution = contribution_repository.get_locked(db, contribution_id)
         if contribution is None:
             raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
         if not contribution.is_open or contribution.status not in (ContributionStatus.UPCOMING, ContributionStatus.ACTIVE):
@@ -552,7 +604,7 @@ class ContributionService:
         self._recompute_totals(db, contribution)
 
     def admin_add_member(self, db: Session, *, actor: User, contribution_id: uuid.UUID, user_id: uuid.UUID) -> ContributionOut:
-        contribution = contribution_repository.get(db, contribution_id)
+        contribution = contribution_repository.get_locked(db, contribution_id)
         if contribution is None:
             raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
 
@@ -604,6 +656,91 @@ class ContributionService:
             description=f"Admin added {member_user.first_name} {member_user.last_name} to '{contribution.name}' at position {next_position}.",
             target=contribution.name,
             target_id=contribution.id,
+        )
+
+        self._sync_schedule(db, contribution)
+        self._recompute_totals(db, contribution)
+        return self._build_out(contribution)
+
+    def admin_set_position(self, db: Session, *, actor: User, contribution_id: uuid.UUID, user_id: uuid.UUID, position: int) -> ContributionOut:
+        """Move a member to an absolute rotational position.
+
+        The rotation can only be changed before the plan has started / before
+        any contributions or payouts have been processed. After that the order
+        is locked so an active cycle cannot be corrupted.
+        """
+        contribution = contribution_repository.get_locked(db, contribution_id)
+        if contribution is None:
+            raise AppException(message="Contribution not found.", status_code=404, error_code="CONTRIBUTION_NOT_FOUND")
+
+        member = contribution_member_repository.get(db, contribution_id, user_id)
+        if member is None or member.status != MemberStatus.ACTIVE:
+            raise AppException(
+                message="This user is not an active member of the contribution.",
+                status_code=404,
+                error_code="NOT_MEMBER",
+            )
+
+        active = contribution_member_repository.list_active(db, contribution_id)
+        if position < 1 or position > len(active):
+            raise AppException(
+                message=f"Position must be between 1 and {len(active)}.",
+                status_code=422,
+                error_code="INVALID_POSITION",
+            )
+
+        if member.position == position:
+            return self._build_out(contribution)
+
+        if start_date_in_past(contribution.start_date) or contribution.status in (
+            ContributionStatus.ACTIVE,
+            ContributionStatus.COMPLETED,
+        ):
+            raise AppException(
+                message="The rotation is locked once a contribution has started.",
+                status_code=400,
+                error_code="ROTATION_LOCKED",
+            )
+
+        has_history = any(
+            s.status == ScheduleStatus.PAID
+            for s in contribution_schedule_repository.list_schedule(db, contribution_id)
+        ) or any(
+            p.status == PayoutStatus.PAID
+            for p in contribution_payout_repository.list_for_contribution(db, contribution_id)
+        )
+        if has_history:
+            raise AppException(
+                message="The rotation is locked once contributions or withdrawals have begun.",
+                status_code=400,
+                error_code="ROTATION_LOCKED",
+            )
+
+        ordered = [m for m in active if m.id != member.id]
+        ordered.insert(position - 1, member)
+
+        changes = []
+        for index, item in enumerate(ordered, start=1):
+            if item.position != index:
+                contribution_member_repository.set_position(db, item, index)
+                self._sync_member_payout(db, contribution, item, index)
+                changes.append((item.display_name, index))
+
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=actor.role,
+            action=AuditAction.UPDATE,
+            category=AuditCategory.CONTRIBUTION,
+            description=(
+                f"Admin repositioned {changes[0][0] if changes else member.display_name} "
+                f"to #{position} in '{contribution.name}'."
+            ),
+            target=contribution.name,
+            target_id=contribution.id,
+            details={"moved_to": [{"member": name, "position": pos} for name, pos in changes]},
         )
 
         self._sync_schedule(db, contribution)
@@ -800,13 +937,106 @@ class ContributionService:
                 error_code="INSUFFICIENT_FUNDS",
             )
 
+        self._process_rotation_payouts(db, contribution)
+        self._sync_schedule(db, contribution)
         return self._build_out(contribution, member_id=member.id)
+
+    def _process_rotation_payouts(self, db: Session, contribution: Contribution) -> dict:
+        """Pay the rotation for rounds whose contributions are complete.
+
+        Rotational model: the member at position ``p`` receives the pooled
+        round-``p`` contributions once *every* active member has paid at least
+        ``p`` schedules. Idempotent — payouts already PAID are never credited
+        again. The money is credited to the member's wallet ledger so they can
+        withdraw it like any other balance.
+        """
+        active = contribution_member_repository.list_active(db, contribution.id)
+        if not active:
+            return {"payouts": 0}
+
+        payouts = {
+            p.member_id: p
+            for p in contribution_payout_repository.list_for_contribution(db, contribution.id)
+        }
+        paid_per_member = {
+            member.id: sum(
+                1
+                for s in contribution.schedule
+                if s.member_id == member.id and s.status == ScheduleStatus.PAID
+            )
+            for member in active
+        }
+
+        total_payouts = 0
+        for member in sorted(active, key=lambda m: m.position):
+            position = member.position
+            if position < 1:
+                continue
+            if any(paid_per_member.get(m.id, 0) < position for m in active):
+                continue
+
+            payout = payouts.get(member.id)
+            if payout is None or payout.status != PayoutStatus.PENDING:
+                continue
+
+            contributors = [m for m in active if paid_per_member.get(m.id, 0) >= position]
+            actual_amount = contribution.amount * len(contributors)
+            if actual_amount <= 0:
+                continue
+
+            transaction = wallet_service.credit(
+                db,
+                user_id=member.user_id,
+                amount=actual_amount,
+                description=f"Contribution payout — {contribution.name} (Round {position})",
+                reference=make_reference("PAY"),
+                type_=TransactionType.CONTRIBUTION,
+                details={
+                    "contribution_id": str(contribution.id),
+                    "payout": True,
+                    "member_id": str(member.id),
+                    "round_number": position,
+                    "expected_amount": payout.amount,
+                },
+            )
+            payout.status = PayoutStatus.PAID
+            payout.paid_at = _utcnow()
+            payout.transaction_id = transaction.id
+            db.flush()
+            total_payouts += 1
+
+            owner = member.user
+            audit_log_repository.create(
+                db,
+                actor_id=member.user_id,
+                actor_name=member.display_name,
+                actor_email=owner.email if owner else "",
+                actor_role=owner.role if owner else None,
+                action=AuditAction.CREATE,
+                category=AuditCategory.CONTRIBUTION,
+                description=f"Rotational payout {actual_amount} for '{contribution.name}' (Round {position}).",
+                target=contribution.name,
+                target_id=contribution.id,
+                details={"round_number": position, "transaction_id": str(transaction.id)},
+            )
+
+            notification_service.create(
+                db,
+                user_id=member.user_id,
+                title="Your contribution payout is in",
+                message=f"We credited {actual_amount} to your wallet for '{contribution.name}' (Round {position}).",
+                type_=NotificationType.CONTRIBUTION,
+            )
+
+        return {"payouts": total_payouts}
 
     def run_automatic_contributions(self, db: Session, *, contribution_id: uuid.UUID | None = None) -> dict:
         """Attempt to collect pending due contributions via automatic wallet funding.
 
-        Safe to run from a scheduler. Payments short on funds are recorded on the
-        schedule (failure_reason=insufficient_funds) and left PENDING/retryable.
+        Also processes the rotational payout for any round whose contributions
+        are now complete. Safe to run from a scheduler. Payments short on funds
+        are recorded on the schedule (failure_reason=insufficient_funds) and
+        left PENDING/retryable.
         """
         now = _utcnow()
 
@@ -820,6 +1050,7 @@ class ContributionService:
         total_processed = 0
         total_paid = 0
         total_failed = 0
+        total_payouts = 0
         for cid in ids:
             contribution = contribution_repository.get(db, cid)
             if contribution is None or contribution.status not in (
@@ -827,6 +1058,7 @@ class ContributionService:
                 ContributionStatus.UPCOMING,
             ):
                 continue
+            self._reconcile_payout_dates(db, contribution)
             self._sync_schedule(db, contribution)
             members = contribution_member_repository.list_auto_wallet(db, cid)
             for member in members:
@@ -845,10 +1077,13 @@ class ContributionService:
                     else:
                         total_failed += 1
 
+            total_payouts += self._process_rotation_payouts(db, contribution)["payouts"]
+
         return {
             "processed": total_processed,
             "paid": total_paid,
             "insufficient_funds": total_failed,
+            "payouts": total_payouts,
         }
 
 

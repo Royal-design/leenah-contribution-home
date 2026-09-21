@@ -1,11 +1,14 @@
+"use client"
+
 import Link from "next/link"
 import { CalendarClock, PiggyBank, Users, Wallet } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { formatDate, formatNaira } from "@/lib/format"
+import { formatDate, formatMonthYear, formatNaira } from "@/lib/format"
 import { formatDurationMonths } from "@/lib/dates"
+import { useAuthStore } from "@/stores/auth-store"
 import type { Contribution, SavingsPlan } from "@/types"
 
 export type PlanType = "savings" | "contribution"
@@ -18,6 +21,7 @@ interface PlanCardProps {
 }
 
 export function PlanCard({ type, plan, href, joined = false }: PlanCardProps) {
+  const currentUserId = useAuthStore((state) => state.user?.id)
   const isSavings = type === "savings"
   const sp = isSavings ? (plan as SavingsPlan) : null
   const con = isSavings ? null : (plan as Contribution)
@@ -33,6 +37,13 @@ export function PlanCard({ type, plan, href, joined = false }: PlanCardProps) {
     : con
       ? `${con.rounds} ${con.rounds === 1 ? "round" : "rounds"}`
       : ""
+
+  const myMember = !isSavings
+    ? con?.members.find((member) => member.userId === currentUserId)
+    : undefined
+  const myPayout = !isSavings
+    ? (con?.payouts ?? []).find((payout) => payout.memberId === myMember?.id)
+    : undefined
 
   return (
     <Link href={href} className="group block outline-none">
@@ -91,12 +102,19 @@ export function PlanCard({ type, plan, href, joined = false }: PlanCardProps) {
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>
                   {joined ? (
-                    <>
+                    isSavings ? (
                       <span className="inline-flex items-center gap-1">
                         <Wallet className="size-3.5" aria-hidden="true" />
                         {formatNaira(totalSaved)} saved
                       </span>
-                    </>
+                    ) : myMember ? (
+                      <span>
+                        Position #{myMember.position}
+                        {myPayout ? ` · Withdrawal ${formatMonthYear(myPayout.scheduledDate)}` : ""}
+                      </span>
+                    ) : (
+                      <span>{formatNaira(totalSaved)} contributed</span>
+                    )
                   ) : (
                     <span>{progress}% funded</span>
                   )}

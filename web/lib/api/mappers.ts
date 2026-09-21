@@ -5,6 +5,7 @@ import type {
   BankAccount,
   Contribution,
   ContributionMember,
+  ContributionPayout,
   ContributionScheduleEntry,
   DVA,
   Role,
@@ -85,6 +86,32 @@ export interface RawContributionScheduleEntry {
   amount: number
 }
 
+export interface RawContributionPayout {
+  id: string
+  contribution_id: string
+  member_id: string
+  round_number: number
+  scheduled_date: string
+  amount: number
+  status: "pending" | "paid" | "skipped"
+  paid_at: string | null
+  transaction_id: string | null
+}
+
+export function mapContributionPayout(raw: RawContributionPayout): ContributionPayout {
+  return {
+    id: raw.id,
+    contributionId: raw.contribution_id,
+    memberId: raw.member_id,
+    roundNumber: raw.round_number,
+    scheduledDate: raw.scheduled_date,
+    amount: raw.amount,
+    status: raw.status,
+    paidAt: raw.paid_at ?? undefined,
+    transactionId: raw.transaction_id ?? undefined,
+  }
+}
+
 export interface RawContribution {
   id: string
   name: string
@@ -109,6 +136,7 @@ export interface RawContribution {
   created_at: string
   members?: RawContributionMember[]
   schedule?: RawContributionScheduleEntry[]
+  payouts?: RawContributionPayout[]
 }
 
 export function mapContribution(raw: RawContribution): Contribution {
@@ -119,6 +147,7 @@ export function mapContribution(raw: RawContribution): Contribution {
     avatar: member.avatar ?? undefined,
     position: member.position,
     totalContributed: member.total_contributed,
+    joinedAt: member.joined_at,
   }))
 
   const schedule: ContributionScheduleEntry[] = (raw.schedule ?? []).map((entry) => ({
@@ -129,6 +158,8 @@ export function mapContribution(raw: RawContribution): Contribution {
     status: entry.status,
     amount: entry.amount,
   }))
+
+  const payouts: ContributionPayout[] = (raw.payouts ?? []).map(mapContributionPayout)
 
   const rule = raw.withdrawal_rule
   const ruleType = rule?.type === "fixed_date" ? "fixed_date" : "on_schedule"
@@ -161,6 +192,7 @@ export function mapContribution(raw: RawContribution): Contribution {
     lastPaymentDate: raw.last_payment_date ?? undefined,
     members,
     schedule,
+    payouts,
     withdrawalRule,
     createdBy: raw.created_by ?? undefined,
     isOpen: raw.is_open,

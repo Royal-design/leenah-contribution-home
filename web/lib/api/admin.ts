@@ -244,6 +244,18 @@ export async function apiAdminRemoveContributionMember(
   return mapContribution(data)
 }
 
+export async function apiAdminSetContributionMemberPosition(
+  contributionId: string,
+  userId: string,
+  position: number
+): Promise<Contribution> {
+  const { data } = await api.patch<RawContribution>(
+    `/api/admin/contributions/${contributionId}/members/${userId}/position`,
+    { position }
+  )
+  return mapContribution(data)
+}
+
 export async function apiAdminListTransactions(params?: {
   page?: number
   pageSize?: number

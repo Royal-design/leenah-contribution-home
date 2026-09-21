@@ -38,6 +38,7 @@ from app.utils.dates import (
     end_date_from_duration,
     period_count,
     period_dates,
+    start_date_change_forbidden,
     start_date_in_past,
     utcnow,
 )
@@ -249,11 +250,18 @@ class SavingsPlanService:
         }
 
     def enrollments(self, db: Session, *, plan_id: uuid.UUID) -> list[SavingsPlanEnrollmentDetailOut]:
-        """Admin-facing enrollment list with member names and emails."""
+        """Admin-facing enrollment list with member names and emails.
+
+        Only active members are returned — removing a member takes them out of
+        the plan (their enrollment is soft-removed; history is preserved, and
+        an admin can re-add them afterwards).
+        """
         plan = self._get_or_404(db, plan_id)
         rows = savings_plan_enrollment_repository.list_for_plan(db, plan.id)
         result: list[SavingsPlanEnrollmentDetailOut] = []
         for row in rows:
+            if row.status != EnrollmentStatus.ACTIVE:
+                continue
             user = user_repository.get(db, row.user_id)
             result.append(
                 SavingsPlanEnrollmentDetailOut(
@@ -289,6 +297,14 @@ class SavingsPlanService:
             start = data.get("start_date") or plan.start_date
             end = end_date_from_duration(start, data["duration_months"])
             data["end_date"] = end
+
+        if "start_date" in data and data["start_date"] is not None:
+            if start_date_change_forbidden(data["start_date"], plan.start_date):
+                raise AppException(
+                    message="Start date cannot be in the past.",
+                    status_code=422,
+                    error_code="START_DATE_IN_PAST",
+                )
 
         for key, value in data.items():
             if value is not None:
@@ -480,6 +496,17 @@ class SavingsPlanService:
                 savings_plan_enrollment_repository.set_next_payment_date(
                     db, enrollment, schedules[0].due_date
                 )
+        else:
+            pending = [
+                s
+                for s in savings_plan_schedule_repository.list_for_enrollment(
+                    db, plan_id, enrollment.id
+                )
+                if s.status != ScheduleStatus.PAID
+            ]
+            savings_plan_enrollment_repository.set_next_payment_date(
+                db, enrollment, pending[0].due_date if pending else None
+            )
 
         audit_log_repository.create(
             db,

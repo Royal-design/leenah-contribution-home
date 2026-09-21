@@ -20,7 +20,13 @@ from app.models.user import User
 from app.repositories.audit_log_repository import audit_log_repository
 from app.repositories.user_repository import user_repository
 from app.schemas.admin import AdminStats
-from app.schemas.contribution import ContributionCreate, ContributionMemberAdd, ContributionOut, ContributionUpdate
+from app.schemas.contribution import (
+    ContributionCreate,
+    ContributionMemberAdd,
+    ContributionMemberPositionUpdate,
+    ContributionOut,
+    ContributionUpdate,
+)
 from app.schemas.notification import BroadcastMessageRequest, DirectMessageRequest
 from app.schemas.paystack import WithdrawalApproveRequest, WithdrawalRejectRequest
 from app.schemas.response import MessageResponse, SuccessResponse
@@ -223,6 +229,23 @@ def admin_add_contribution_member(
         db, actor=admin, contribution_id=contribution_id, user_id=payload.user_id
     )
     return SuccessResponse(message="Member added.", data=result)
+
+
+@router.patch(
+    "/contributions/{contribution_id}/members/{user_id}/position",
+    response_model=SuccessResponse[ContributionOut],
+)
+def admin_set_contribution_member_position(
+    contribution_id: uuid.UUID,
+    user_id: uuid.UUID,
+    payload: ContributionMemberPositionUpdate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = contribution_service.admin_set_position(
+        db, actor=admin, contribution_id=contribution_id, user_id=user_id, position=payload.position
+    )
+    return SuccessResponse(message="Member position updated.", data=result)
 
 
 @router.delete("/contributions/{contribution_id}/members/{user_id}", response_model=SuccessResponse[ContributionOut])

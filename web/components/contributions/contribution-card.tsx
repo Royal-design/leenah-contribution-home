@@ -1,10 +1,13 @@
+"use client"
+
 import Link from "next/link"
 import { Users, Wallet } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { formatDate, formatNaira } from "@/lib/format"
+import { formatDate, formatMonthYear, formatNaira } from "@/lib/format"
 import { Progress } from "@/components/ui/progress"
+import { useAuthStore } from "@/stores/auth-store"
 import type { Contribution } from "@/types"
 
 export function ContributionCard({
@@ -12,6 +15,15 @@ export function ContributionCard({
 }: {
   contribution: Contribution
 }) {
+  const currentUserId = useAuthStore((state) => state.user?.id)
+
+  const myMember = contribution.members.find(
+    (member) => member.userId === currentUserId
+  )
+  const myPayout = (contribution.payouts ?? []).find(
+    (payout) => payout.memberId === myMember?.id
+  )
+
   return (
     <Link
       href={`/contributions/${contribution.id}`}
@@ -43,6 +55,19 @@ export function ContributionCard({
             </span>
           </div>
 
+          {myMember && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 font-medium text-primary">
+                Position #{myMember.position}
+              </span>
+              {myPayout && (
+                <span className="text-muted-foreground">
+                  Withdrawal: {formatMonthYear(myPayout.scheduledDate)}
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <Progress
               value={contribution.progress}
@@ -50,7 +75,14 @@ export function ContributionCard({
             />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{contribution.progress}% complete</span>
-              <span>Next: {formatDate(contribution.nextPaymentDate)}</span>
+              <span>
+                Next:{" "}
+                {contribution.nextPaymentDate
+                  ? formatDate(contribution.nextPaymentDate)
+                  : myMember
+                    ? "No due payment"
+                    : "Join to start"}
+              </span>
             </div>
           </div>
         </CardContent>

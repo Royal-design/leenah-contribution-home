@@ -8,7 +8,15 @@ from datetime import datetime
 
 import pytest
 
-from app.utils.dates import add_months, end_date_from_duration, period_count, period_dates
+from app.utils.dates import (
+    add_months,
+    end_date_from_duration,
+    payout_date_at,
+    period_count,
+    period_dates,
+    start_date_change_forbidden,
+    start_date_in_past,
+)
 
 
 def _dt(year: int, month: int, day: int) -> datetime:
@@ -100,3 +108,53 @@ def test_period_dates_month_end_safety():
 def test_period_dates_weekly():
     dates = period_dates(_dt(2027, 1, 1), "weekly", 2)
     assert dates == [_dt(2027, 1, 1), _dt(2027, 1, 8)]
+
+
+def test_start_date_in_past():
+    assert start_date_in_past(datetime(2020, 1, 1))
+    assert not start_date_in_past(datetime(2099, 1, 1))
+
+
+def test_start_date_change_forbidden():
+    # Future starts are always fine.
+    assert not start_date_change_forbidden(datetime(2099, 1, 1))
+    # A genuinely new past start is forbidden.
+    assert start_date_change_forbidden(datetime(2020, 1, 1))
+    # Keeping the existing (past) start date is allowed so started plans stay editable.
+    assert not start_date_change_forbidden(datetime(2020, 1, 1), current=datetime(2020, 1, 1))
+    assert start_date_change_forbidden(datetime(2020, 1, 1), current=datetime(2021, 3, 3))
+
+
+@pytest.mark.parametrize(
+    ("start", "frequency", "position", "expected"),
+    [
+        # Monthly plans pay out at the END of each calendar month.
+        (_dt(2027, 1, 1), "monthly", 1, _dt(2027, 1, 31)),
+        (_dt(2027, 1, 1), "monthly", 2, _dt(2027, 2, 28)),
+        (_dt(2027, 1, 1), "monthly", 3, _dt(2027, 3, 31)),
+        (_dt(2027, 1, 1), "monthly", 12, _dt(2027, 12, 31)),
+        (_dt(2026, 10, 1), "monthly", 4, _dt(2027, 1, 31)),
+        # Mid-month start still pays at the end of the position's month.
+        (_dt(2027, 1, 15), "monthly", 1, _dt(2027, 1, 31)),
+        (_dt(2027, 1, 15), "monthly", 2, _dt(2027, 2, 28)),
+    ],
+)
+def test_payout_date_at_monthly_table(start, frequency, position, expected):
+    assert payout_date_at(start, frequency, position) == expected
+
+
+def test_payout_date_at_monthly_calendar():
+    # Month-end clamping, years and leap years.
+    assert payout_date_at(_dt(2027, 1, 31), "monthly", 2) == _dt(2027, 2, 28)
+    assert payout_date_at(_dt(2024, 1, 31), "monthly", 2) == _dt(2024, 2, 29)  # leap
+    assert payout_date_at(_dt(2024, 3, 31), "monthly", 2) == _dt(2024, 4, 30)
+    assert payout_date_at(_dt(2027, 1, 1), "monthly", 12) == _dt(2027, 12, 31)
+    # Position 1 pays at the end of the start month.
+    assert payout_date_at(_dt(2027, 1, 31), "monthly", 1) == _dt(2027, 1, 31)
+    assert payout_date_at(_dt(2027, 2, 10), "monthly", 1) == _dt(2027, 2, 28)
+
+
+def test_payout_date_at_weekly_biweekly():
+    assert payout_date_at(_dt(2027, 1, 1), "weekly", 1) == _dt(2027, 1, 1)
+    assert payout_date_at(_dt(2027, 1, 1), "weekly", 2) == _dt(2027, 1, 8)
+    assert payout_date_at(_dt(2027, 1, 1), "biweekly", 2) == _dt(2027, 1, 15)

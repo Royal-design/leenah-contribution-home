@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm, type Resolver } from "react-hook-form"
 import * as z from "zod"
 import { ChevronLeft, Save } from "lucide-react"
+import { toast } from "sonner"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
@@ -35,7 +36,7 @@ import {
   useAdminSavingsPlan,
   useAdminUpdateSavingsPlan,
 } from "@/hooks/queries/use-savings-plans"
-import { DURATION_PRESETS, endDateFromDuration } from "@/lib/dates"
+import { DURATION_PRESETS, isPastDate, endDateFromDuration } from "@/lib/dates"
 import type { Frequency, SavingsPlanStatus } from "@/types"
 
 const frequencies: Array<{ value: Frequency; label: string }> = [
@@ -187,7 +188,13 @@ export default function EditSavingsPlanPage() {
     )
   }
 
+  const originalStartDate = toDateInput(plan.startDate)
+
   function onSubmit(values: FormValues) {
+    if (values.startDate && isPastDate(values.startDate) && values.startDate !== originalStartDate) {
+      toast.error("Start date cannot be in the past.")
+      return
+    }
     updatePlan.mutate(
       {
         id,

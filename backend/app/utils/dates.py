@@ -11,9 +11,12 @@ Conventions
   Jan 15 ends Apr 15; a 12-month plan from Oct 1 ends Oct 1 the next year.
 - The number of scheduled periods is the count of due dates inside the
   ``[start, end)`` window, so a 3-month monthly plan makes 3 payments.
+- ``payout_date_at`` converts a rotational *position* into a withdrawal date:
+  weekly/biweekly step from the start; monthly/custom plans pay at the end of
+  the position's calendar month.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import calendar
 
 
@@ -68,6 +71,25 @@ def period_dates(start: datetime, frequency: str, periods: int) -> list[datetime
     return dates
 
 
+def payout_date_at(start: datetime, frequency: str, position: int) -> datetime:
+    """Withdrawal date for the member holding rotational ``position``.
+
+    Position 1 withdraws in the plan's first period. Weekly/biweekly use fixed
+    7/14-day steps from the start date. Monthly/custom plans withdraw at the
+    *end of each calendar month* (leap-year and month-end safe): position 2 in
+    a plan started in January pays out on the last day of February, etc.
+    """
+    step_days = {"weekly": 7, "biweekly": 14}
+    if frequency in step_days:
+        return _add_days(start, step_days[frequency] * max(position - 1, 0))
+
+    months_after = max(position - 1, 0)
+    year = start.year + (start.month - 1 + months_after) // 12
+    month = (start.month - 1 + months_after) % 12 + 1
+    last_day = calendar.monthrange(year, month)[1]
+    return start.replace(year=year, month=month, day=last_day)
+
+
 def _step_count(start: datetime, end: datetime, days: int) -> int:
     """Number of 7/14-day due dates strictly inside ``[start, end)``."""
     diff = end - start
@@ -94,3 +116,17 @@ def start_date_in_past(start: datetime) -> bool:
     users from self-joining plans that have already begun.
     """
     return start.date() < datetime.now(timezone.utc).date()
+
+
+def start_date_change_forbidden(start: datetime, current: datetime | None = None) -> bool:
+    """True when moving a plan's start date into the past.
+
+    Keeping the same calendar date as ``current`` is still allowed, so an
+    already-started plan can keep being edited without being forced to change
+    its (legacy) start date.
+    """
+    if not start_date_in_past(start):
+        return False
+    if current is not None and start.date() == current.date():
+        return False
+    return True

@@ -376,7 +376,7 @@ class TestContributionFinance:
                 "frequency": "monthly",
                 "member_count": 3,
                 "rounds": 3,
-                "start_date": "2026-09-01T00:00:00Z",
+                "start_date": _future_iso(),
             },
         )
         assert resp.status_code == 403

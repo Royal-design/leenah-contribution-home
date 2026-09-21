@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm, type Resolver } from "react-hook-form"
 import * as z from "zod"
 import { ChevronLeft, Save } from "lucide-react"
+import { toast } from "sonner"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAdminContribution, useAdminUpdateContribution } from "@/hooks/queries/use-admin"
+import { isPastDate } from "@/lib/dates"
 import type { ContributionStatus, Frequency } from "@/types"
 
 const frequencies: Array<{ value: Frequency; label: string }> = [
@@ -42,31 +44,41 @@ const statuses: Array<{ value: ContributionStatus; label: string }> = [
   { value: "completed", label: "Completed" },
 ]
 
-const formSchema = z.object({
-  name: z.string().trim().min(3, "Plan name must be at least 3 characters."),
-  description: z.string().trim().optional(),
-  organization: z.string().trim().optional(),
-  amount: z.coerce
-    .number({ message: "Enter a valid amount." })
-    .int()
-    .positive("Amount must be greater than zero."),
-  frequency: z.enum(["weekly", "biweekly", "monthly", "custom"], { message: "Select a frequency." }),
-  memberCount: z.coerce
-    .number({ message: "Enter a valid number." })
-    .int()
-    .min(1, "At least 1 member.")
-    .max(500, "Maximum 500 members."),
-  rounds: z.coerce
-    .number({ message: "Enter a valid number." })
-    .int()
-    .min(1, "At least 1 round.")
-    .max(120, "Maximum 120 rounds."),
-  startDate: z.string().min(1, "Choose a start date."),
-  endDate: z.string().optional(),
-  withdrawalDate: z.string().optional(),
-  status: z.enum(["draft", "upcoming", "active", "paused", "completed"], { message: "Select a status." }),
-  isOpen: z.boolean(),
-})
+const formSchema = z
+  .object({
+    name: z.string().trim().min(3, "Plan name must be at least 3 characters."),
+    description: z.string().trim().optional(),
+    organization: z.string().trim().optional(),
+    amount: z.coerce
+      .number({ message: "Enter a valid amount." })
+      .int()
+      .positive("Amount must be greater than zero."),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "custom"], { message: "Select a frequency." }),
+    memberCount: z.coerce
+      .number({ message: "Enter a valid number." })
+      .int()
+      .min(1, "At least 1 member.")
+      .max(500, "Maximum 500 members."),
+    rounds: z.coerce
+      .number({ message: "Enter a valid number." })
+      .int()
+      .min(1, "At least 1 round.")
+      .max(120, "Maximum 120 rounds."),
+    startDate: z.string().min(1, "Choose a start date."),
+    endDate: z.string().optional(),
+    withdrawalDate: z.string().optional(),
+    status: z.enum(["draft", "upcoming", "active", "paused", "completed"], { message: "Select a status." }),
+    isOpen: z.boolean(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.memberCount > data.rounds) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["memberCount"],
+        message: `A plan supports one withdrawal position per round. Use ${data.rounds} or fewer participants.`,
+      })
+    }
+  })
 
 type FormValues = z.infer<typeof formSchema>
 
@@ -142,7 +154,17 @@ export default function EditContributionPage() {
     )
   }
 
+  const originalStartDate = toDateInput(contribution.startDate)
+
   function onSubmit(values: FormValues) {
+    if (
+      values.startDate &&
+      isPastDate(values.startDate) &&
+      values.startDate !== originalStartDate
+    ) {
+      toast.error("Start date cannot be in the past.")
+      return
+    }
     updateContribution.mutate(
       {
         id,

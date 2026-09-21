@@ -27,6 +27,18 @@ class ContributionRepository:
     def get(self, db: Session, contribution_id: uuid.UUID) -> Contribution | None:
         return db.get(Contribution, contribution_id)
 
+    def get_locked(self, db: Session, contribution_id: uuid.UUID) -> Contribution | None:
+        """Fetch the contribution with its row locked (SELECT ... FOR UPDATE).
+
+        Serialises joining/enrollment so concurrent participants can never be
+        assigned the same rotational position (first-come-first-served).
+        """
+        return db.execute(
+            select(Contribution)
+            .where(Contribution.id == contribution_id)
+            .with_for_update()
+        ).scalar_one_or_none()
+
     def list_mine(
         self,
         db: Session,
@@ -173,6 +185,11 @@ class ContributionMemberRepository:
     def set_funding(self, db: Session, member: ContributionMember, *, funding_method: FundingMethod, automatic: bool) -> None:
         member.funding_method = funding_method
         member.automatic = automatic
+        db.flush()
+
+    def set_position(self, db: Session, member: ContributionMember, position: int) -> None:
+        member.position = position
+        member.payout_position = position
         db.flush()
 
     def set_next_payment_date(self, db: Session, member: ContributionMember, value: datetime | None) -> None:
