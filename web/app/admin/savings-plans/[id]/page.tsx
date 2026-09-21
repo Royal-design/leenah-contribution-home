@@ -290,6 +290,12 @@ export default function AdminSavingsPlanDetailPage() {
                         variant="ghost"
                         size="icon-sm"
                         aria-label={`Remove ${member.userName}`}
+                        disabled={member.totalSaved > 0}
+                        title={
+                          member.totalSaved > 0
+                            ? "Has payments — cannot be removed"
+                            : undefined
+                        }
                         onClick={() => setPendingRemove(member)}
                       >
                         <X className="text-destructive" />

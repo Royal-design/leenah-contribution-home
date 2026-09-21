@@ -44,12 +44,21 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  nativeButton,
+  render,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  // When a custom `render` is supplied (e.g. a Next.js Link, which is an
+  // anchor, not a <button>), Base UI must not force native button semantics —
+  // doing so keeps the composed element's own semantics and avoids the
+  // "expected a native <button>" dev warning.
+  const usesCustomRender = render !== undefined
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      nativeButton={nativeButton ?? (usesCustomRender ? false : true)}
+      render={render}
       {...props}
     />
   )

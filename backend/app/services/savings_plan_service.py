@@ -541,6 +541,22 @@ class SavingsPlanService:
                 error_code="NOT_ENROLLED",
             )
 
+        has_payments = enrollment.total_saved > 0 or any(
+            s.status == ScheduleStatus.PAID
+            for s in savings_plan_schedule_repository.list_for_enrollment(
+                db, plan_id, enrollment.id
+            )
+        )
+        if has_payments:
+            raise AppException(
+                message=(
+                    "This member has already started paying into the savings plan "
+                    "and cannot be removed."
+                ),
+                status_code=400,
+                error_code="MEMBER_HAS_PAYMENTS",
+            )
+
         savings_plan_enrollment_repository.set_status(db, enrollment, EnrollmentStatus.LEFT)
 
         audit_log_repository.create(

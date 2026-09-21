@@ -767,6 +767,22 @@ class ContributionService:
                 error_code="CANNOT_REMOVE_CREATOR",
             )
 
+        has_payments = member.total_contributed > 0 or any(
+            s.status == ScheduleStatus.PAID
+            for s in contribution_schedule_repository.list_for_member(
+                db, contribution_id, member.id
+            )
+        )
+        if has_payments:
+            raise AppException(
+                message=(
+                    "This member has already contributed and cannot be removed "
+                    "from the active rotation."
+                ),
+                status_code=400,
+                error_code="MEMBER_HAS_PAYMENTS",
+            )
+
         contribution_member_repository.set_status(db, member, MemberStatus.REMOVED)
 
         audit_log_repository.create(

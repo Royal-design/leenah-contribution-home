@@ -1,17 +1,28 @@
 "use client"
 
 import Link from "next/link"
-import { Users, PiggyBank, Wallet, Clock, UsersRound, Compass } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Users, PiggyBank, Wallet, Clock, UsersRound, Compass, Plus } from "lucide-react"
 
 import { DashboardStatCard } from "@/components/dashboard/dashboard-stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { PageSkeleton } from "@/components/shared/skeletons"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useAdminStats } from "@/hooks/queries/use-admin"
 import { formatNaira } from "@/lib/format"
 
 export default function AdminDashboardPage() {
+  const router = useRouter()
   const { data, isPending } = useAdminStats()
 
   if (isPending || !data) {
@@ -24,11 +35,50 @@ export default function AdminDashboardPage() {
         title="Admin overview"
         description="A snapshot of your platform's health."
       >
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        {/* Mobile: one primary action + a compact "New" menu */}
+        <div className="flex w-full items-center gap-2 sm:hidden">
+          <Button
+            className="flex-1"
+            render={<Link href="/admin/plans" />}
+          >
+            <Compass />
+            Manage plans
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="outline" aria-label="Create a new plan">
+                  <Plus />
+                  New
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>New plan</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => router.push("/admin/savings-plans/new")}
+                >
+                  <PiggyBank />
+                  Savings plan
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => router.push("/admin/contributions/create")}
+                >
+                  <Users />
+                  Contribution plan
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Desktop: full row of actions */}
+        <div className="hidden items-center gap-2 sm:flex">
           <Button
             variant="outline"
             size="sm"
-            className="sm:flex-none"
             render={<Link href="/admin/savings-plans/new" />}
           >
             <PiggyBank />
@@ -37,13 +87,12 @@ export default function AdminDashboardPage() {
           <Button
             variant="outline"
             size="sm"
-            className="sm:flex-none"
             render={<Link href="/admin/contributions/create" />}
           >
             <Users />
             Create contribution plan
           </Button>
-          <Button size="sm" className="sm:flex-none" render={<Link href="/admin/plans" />}>
+          <Button size="sm" render={<Link href="/admin/plans" />}>
             <Compass />
             Manage plans
           </Button>

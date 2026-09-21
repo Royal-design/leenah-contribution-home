@@ -46,9 +46,13 @@ http.interceptors.request.use((config) => {
 let refreshPromise: Promise<string | null> | null = null
 let expiryNotified = false
 let refreshTransientFailure = false
+// The refresh token that last failed to refresh. Guards against killing a
+// healthy session when another in-flight refresh — or another tab — already
+// rotated the token successfully.
+let lastFailedRefreshToken: string | null = null
 
 async function refreshAccessToken(): Promise<string | null> {
-  const { refreshToken } = getStoredTokens()
+  const refreshToken = getStoredTokens().refreshToken
   if (!refreshToken) {
     return null
   }
@@ -65,11 +69,11 @@ async function refreshAccessToken(): Promise<string | null> {
       })
       const payload = data.data
       if (!payload) {
-        clearStoredSession()
         refreshTransientFailure = false
         return null
       }
       updateStoredTokens(payload.access_token, payload.refresh_token)
+      lastFailedRefreshToken = null
       expiryNotified = false
       refreshTransientFailure = false
       return payload.access_token
@@ -77,8 +81,15 @@ async function refreshAccessToken(): Promise<string | null> {
       const isDefinitive =
         error instanceof AxiosError && error.response?.status !== undefined
       if (isDefinitive) {
-        clearStoredSession()
-        refreshTransientFailure = false
+        lastFailedRefreshToken = refreshToken
+        // Only tear the session down if the token that failed is still the
+        // live one. If it was already replaced (concurrent refresh or another
+        // tab), keep the session alive — the next request will refresh again
+        // with the newer token.
+        if (getStoredTokens().refreshToken === refreshToken) {
+          clearStoredSession()
+          refreshTransientFailure = false
+        }
       } else {
         refreshTransientFailure = true
       }
@@ -150,7 +161,8 @@ http.interceptors.response.use(
       status === 401 &&
       original &&
       !isAuthUrl &&
-      !refreshTransientFailure
+      !refreshTransientFailure &&
+      sessionStillUsesToken(lastFailedRefreshToken)
     ) {
       await forceSessionExpiry()
     }
@@ -158,6 +170,16 @@ http.interceptors.response.use(
     throw toApiError(error)
   }
 )
+
+// True when no refresh attempt failed, or the failed one still matches the
+// currently stored token. When a newer token has replaced it, the session is
+// still healthy and must NOT be torn down.
+function sessionStillUsesToken(failedToken: string | null): boolean {
+  if (!failedToken) {
+    return true
+  }
+  return getStoredTokens().refreshToken === failedToken
+}
 
 async function request<T>(config: AxiosRequestConfig): Promise<ApiResult<T>> {
   const response = await http.request<ApiEnvelope<T> | T>(config)

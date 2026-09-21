@@ -407,6 +407,12 @@ export default function AdminContributionDetailPage() {
                                 variant="ghost"
                                 size="icon-sm"
                                 aria-label={`Remove ${member.name}`}
+                                disabled={member.totalContributed > 0}
+                                title={
+                                  member.totalContributed > 0
+                                    ? "Has contributions — cannot be removed"
+                                    : undefined
+                                }
                                 onClick={() => setPendingRemove(member)}
                               >
                                 <X className="text-destructive" />
