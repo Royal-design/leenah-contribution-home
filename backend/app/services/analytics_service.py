@@ -7,10 +7,14 @@ from app.core.exceptions import AppException
 from app.models.contribution import Contribution
 from app.models.enums import AuditAction, AuditCategory, TransactionStatus
 from app.models.savings_account import SavingsAccount
+from app.models.savings_plan import SavingsPlan
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.repositories.audit_log_repository import audit_log_repository
 from app.repositories.contribution_repository import contribution_repository
+from app.repositories.savings_plan_repository import (
+    savings_plan_repository,
+)
 from app.repositories.savings_repository import savings_account_repository
 from app.repositories.transaction_repository import transaction_repository
 from app.repositories.user_repository import user_repository
@@ -31,15 +35,28 @@ class AnalyticsService:
 
         status_counts = _contribution_status_counts(db)
 
+        total_contributions = db.execute(select(func.count(Contribution.id))).scalar_one()
+        contributed_total = db.execute(select(func.coalesce(func.sum(Contribution.total_contributed), 0))).scalar_one()
+        active_contributions = contribution_repository.count_active(db)
+
+        total_savings_plans = db.execute(select(func.count(SavingsPlan.id))).scalar_one()
+        active_savings_plans = savings_plan_repository.count_active(db)
+        saved_total = savings_plan_repository.total_saved(db)
+
         return AdminStats(
             total_users=user_repository.count(db),
-            active_contributions=contribution_repository.count_active(db),
+            active_contributions=active_contributions,
             total_funds=total_funds,
             pending_withdrawals=withdrawal_repository.count_pending(db),
             monthly_volume=monthly_volume,
             user_growth=user_growth,
             contribution_volume=contribution_volume,
             contribution_status=status_counts,
+            total_plans=total_contributions + total_savings_plans,
+            active_savings_plans=active_savings_plans,
+            active_plans=active_contributions + active_savings_plans,
+            total_in_contribution_plans=contributed_total,
+            total_in_savings_plans=saved_total,
         )
 
     def recent_transactions(self, db: Session, limit: int = 10) -> list[TransactionOut]:

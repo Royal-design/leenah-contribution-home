@@ -22,9 +22,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useNotificationsUnreadCount } from "@/hooks/queries/use-transactions"
 import { getInitials } from "@/lib/format"
 import { isAdmin as hasAdminAccess } from "@/lib/roles"
-import { useNotificationsUnreadCount } from "@/hooks/queries/use-transactions"
 import { useAuthStore } from "@/stores/auth-store"
 
 export function UserMenu({ isAdmin }: { isAdmin: boolean }) {
@@ -87,15 +87,15 @@ export function UserMenu({ isAdmin }: { isAdmin: boolean }) {
             </>
           )}
           <DropdownMenuItem
-            onClick={() =>
-              router.push(isAdmin ? "/admin/profile" : "/profile")
-            }
+            onClick={() => router.push(isAdmin ? "/admin/profile" : "/profile")}
           >
             <User />
             Profile
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => router.push(isAdmin ? "/admin/settings" : "/settings")}
+            onClick={() =>
+              router.push(isAdmin ? "/admin/settings" : "/settings")
+            }
           >
             <Settings />
             Settings
@@ -146,7 +146,7 @@ export function TopHeader({ isAdmin }: { isAdmin: boolean }) {
   const unread = unreadCount ?? 0
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-sidebar px-4 backdrop-blur supports-[backdrop-filter]:bg-sidebar sm:px-6">
       <div className="flex items-center gap-3">
         <Link
           href="/dashboard"
@@ -170,7 +170,7 @@ export function TopHeader({ isAdmin }: { isAdmin: boolean }) {
         >
           <Bell className="size-4" aria-hidden="true" />
           {unread > 0 && (
-            <span className="absolute top-1 right-1 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[0.6rem] font-semibold leading-4 text-white ring-2 ring-background">
+            <span className="absolute top-1 right-1 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[0.6rem] leading-4 font-semibold text-white ring-2 ring-background">
               {unread > 9 ? "9+" : unread}
             </span>
           )}

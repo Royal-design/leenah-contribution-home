@@ -9,6 +9,7 @@ from app.core.exceptions import AppException
 from app.models.enums import (
     AuditAction,
     AuditCategory,
+    SavingsPlanStatus,
     TransactionStatus,
     TransactionType,
     UserRole,
@@ -23,6 +24,7 @@ from app.schemas.contribution import ContributionCreate, ContributionMemberAdd, 
 from app.schemas.notification import BroadcastMessageRequest, DirectMessageRequest
 from app.schemas.paystack import WithdrawalApproveRequest, WithdrawalRejectRequest
 from app.schemas.response import MessageResponse, SuccessResponse
+from app.schemas.savings_plan import SavingsPlanCreate, SavingsPlanOut, SavingsPlanUpdate
 from app.schemas.transaction import TransactionOut
 from app.schemas.user import (
     BulkInviteRequest,
@@ -36,6 +38,7 @@ from app.schemas.withdrawal import WithdrawalOut, WithdrawalReview
 from app.services.analytics_service import analytics_service
 from app.services.contribution_service import contribution_service
 from app.services.notification_service import notification_service
+from app.services.savings_plan_service import savings_plan_service
 from app.services.transaction_service import transaction_service
 from app.services.user_service import user_service
 from app.services.withdrawal_service import withdrawal_service
@@ -231,6 +234,104 @@ def admin_remove_contribution_member(
 ):
     result = contribution_service.admin_remove_member(
         db, actor=admin, contribution_id=contribution_id, user_id=user_id
+    )
+    return SuccessResponse(message="Member removed.", data=result)
+
+
+# ---- Savings plans ----
+
+@router.post("/savings-plans", response_model=SuccessResponse[SavingsPlanOut])
+def admin_create_savings_plan(
+    payload: SavingsPlanCreate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = savings_plan_service.create(db, user=admin, payload=payload)
+    return SuccessResponse(message="Savings plan created.", data=result)
+
+
+@router.get("/savings-plans")
+def list_all_savings_plans(
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+    search: str | None = Query(default=None, max_length=120),
+    status: SavingsPlanStatus | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+):
+    data = savings_plan_service.list_all(db, search=search, status=status, page=page, page_size=page_size)
+    return SuccessResponse(message="Savings plans retrieved.", data=data)
+
+
+@router.get("/savings-plans/{plan_id}", response_model=SuccessResponse[SavingsPlanOut])
+def get_admin_savings_plan(
+    plan_id: uuid.UUID,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = savings_plan_service.get(db, user=None, plan_id=plan_id)
+    return SuccessResponse(message="Savings plan retrieved.", data=result)
+
+
+@router.patch("/savings-plans/{plan_id}", response_model=SuccessResponse[SavingsPlanOut])
+def admin_update_savings_plan(
+    plan_id: uuid.UUID,
+    payload: SavingsPlanUpdate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = savings_plan_service.update(db, user=admin, plan_id=plan_id, payload=payload)
+    return SuccessResponse(message="Savings plan updated.", data=result)
+
+
+@router.delete("/savings-plans/{plan_id}", response_model=MessageResponse)
+def admin_delete_savings_plan(
+    plan_id: uuid.UUID,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    savings_plan_service.delete(db, user=admin, plan_id=plan_id)
+    return MessageResponse(message="Savings plan deleted.")
+
+
+@router.post("/savings-plans/run-automatic")
+def run_automatic_savings_plans(admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    result = savings_plan_service.run_automatic(db)
+    return SuccessResponse(message="Automatic savings collected.", data=result)
+
+
+@router.get("/savings-plans/{plan_id}/enrollments")
+def admin_list_savings_plan_enrollments(
+    plan_id: uuid.UUID,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = savings_plan_service.enrollments(db, plan_id=plan_id)
+    return SuccessResponse(message="Savings plan enrollments retrieved.", data=result)
+
+
+@router.post("/savings-plans/{plan_id}/members", response_model=SuccessResponse[SavingsPlanOut])
+def admin_add_savings_plan_member(
+    plan_id: uuid.UUID,
+    payload: ContributionMemberAdd,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = savings_plan_service.admin_add_member(
+        db, actor=admin, plan_id=plan_id, user_id=payload.user_id
+    )
+    return SuccessResponse(message="Member added.", data=result)
+
+
+@router.delete("/savings-plans/{plan_id}/members/{user_id}", response_model=SuccessResponse[SavingsPlanOut])
+def admin_remove_savings_plan_member(
+    plan_id: uuid.UUID,
+    user_id: uuid.UUID,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    result = savings_plan_service.admin_remove_member(
+        db, actor=admin, plan_id=plan_id, user_id=user_id
     )
     return SuccessResponse(message="Member removed.", data=result)
 

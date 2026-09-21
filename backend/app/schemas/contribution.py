@@ -1,7 +1,7 @@
 from datetime import datetime
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.enums import (
     ContributionStatus,
@@ -21,11 +21,20 @@ class ContributionCreate(BaseModel):
     amount: int = Field(gt=0)
     frequency: Frequency
     member_count: int = Field(ge=1, le=500)
-    rounds: int = Field(default=12, ge=1, le=120)
+    rounds: int = Field(default=12, ge=1, le=240)
     start_date: datetime
+    # Duration in whole calendar months. When provided, the backend derives
+    # end_date automatically (frontend only previews the result).
+    duration_months: int | None = Field(default=None, ge=1, le=240)
     end_date: datetime | None = None
     withdrawal_rule: WithdrawalRuleType | None = None
     fixed_withdrawal_date: datetime | None = None
+
+    @model_validator(mode="after")
+    def _validate_dates(self) -> "ContributionCreate":
+        if self.end_date is not None and self.end_date < self.start_date:
+            raise ValueError("end_date must be on or after start_date")
+        return self
 
 
 class ContributionUpdate(BaseModel):

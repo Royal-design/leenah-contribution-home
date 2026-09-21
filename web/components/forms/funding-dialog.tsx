@@ -107,7 +107,7 @@ function CardFundingTab() {
       </Field>
 
       <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-        You'll be redirected to Paystack's secure checkout to complete payment with your card.
+        You&apos;ll be redirected to Paystack&apos;s secure checkout to complete payment with your card.
       </div>
 
       <Button

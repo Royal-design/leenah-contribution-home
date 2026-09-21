@@ -1,10 +1,12 @@
 "use client"
 
-import { Users, PiggyBank, Wallet, Clock, ArrowLeftRight } from "lucide-react"
+import Link from "next/link"
+import { Users, PiggyBank, Wallet, Clock, UsersRound, Compass } from "lucide-react"
 
 import { DashboardStatCard } from "@/components/dashboard/dashboard-stat-card"
 import { PageHeader } from "@/components/shared/page-header"
 import { PageSkeleton } from "@/components/shared/skeletons"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAdminStats } from "@/hooks/queries/use-admin"
 import { formatNaira } from "@/lib/format"
@@ -21,7 +23,32 @@ export default function AdminDashboardPage() {
       <PageHeader
         title="Admin overview"
         description="A snapshot of your platform's health."
-      />
+      >
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button
+            variant="outline"
+            size="sm"
+            className="sm:flex-none"
+            render={<Link href="/admin/savings-plans/new" />}
+          >
+            <PiggyBank />
+            Create savings plan
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="sm:flex-none"
+            render={<Link href="/admin/contributions/create" />}
+          >
+            <Users />
+            Create contribution plan
+          </Button>
+          <Button size="sm" className="sm:flex-none" render={<Link href="/admin/plans" />}>
+            <Compass />
+            Manage plans
+          </Button>
+        </div>
+      </PageHeader>
 
       <section aria-label="Platform stats" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <DashboardStatCard
@@ -32,17 +59,35 @@ export default function AdminDashboardPage() {
           tone="info"
         />
         <DashboardStatCard
-          title="Active Contributions"
-          value={data.activeContributions.toString()}
-          description="Plans currently running"
-          icon={PiggyBank}
+          title="Active Plans"
+          value={data.activePlans.toString()}
+          description={`${data.activeContributions} contributions · ${data.activeSavingsPlans} savings`}
+          icon={UsersRound}
           tone="success"
         />
+        <DashboardStatCard
+          title="In Savings Plans"
+          value={formatNaira(data.totalInSavingsPlans)}
+          description={`${data.totalPlans} plans across the platform`}
+          icon={PiggyBank}
+          tone="warning"
+        />
+        <DashboardStatCard
+          title="In Contribution Plans"
+          value={formatNaira(data.totalInContributionPlans)}
+          description="Contributed by members"
+          icon={Wallet}
+          tone="default"
+        />
+      </section>
+
+      <section aria-label="Operations" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <DashboardStatCard
           title="Total Wallet Balance"
           value={formatNaira(data.totalFunds)}
           description="Across all users"
           icon={Wallet}
+          tone="info"
         />
         <DashboardStatCard
           title="Pending Withdrawals"
@@ -51,15 +96,12 @@ export default function AdminDashboardPage() {
           icon={Clock}
           tone="warning"
         />
-      </section>
-
-      <section aria-label="Volume" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <DashboardStatCard
           title="Monthly Volume"
           value={formatNaira(data.monthlyVolume)}
           description="Last 30 days transactions"
-          icon={ArrowLeftRight}
-          tone="info"
+          icon={Wallet}
+          tone="success"
         />
       </section>
 

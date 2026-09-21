@@ -14,6 +14,13 @@ class AdminStats(BaseModel):
     user_growth: list[dict]
     contribution_volume: list[dict]
     contribution_status: list[dict]
+    # Plans platform overview (savings + contribution plans).
+    total_plans: int = 0
+    active_savings_plans: int = 0
+    active_plans: int = 0
+    total_in_contribution_plans: int = 0
+    total_in_savings_plans: int = 0
+    plan_volume: list[dict] = []
 
 
 class AdminUserDetail(BaseModel):

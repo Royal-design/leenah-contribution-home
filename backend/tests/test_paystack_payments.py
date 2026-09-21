@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -689,7 +690,7 @@ class TestWalletFlows:
                 "frequency": "monthly",
                 "member_count": 4,
                 "rounds": 4,
-                "start_date": "2026-09-01T00:00:00Z",
+                "start_date": (datetime.now(timezone.utc) + timedelta(days=15)).strftime("%Y-%m-%dT00:00:00Z"),
                 "withdrawal_rule": "on_schedule",
             },
         )

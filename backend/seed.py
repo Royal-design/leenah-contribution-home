@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+from datetime import datetime, timedelta, timezone
 
 from app.core.database import SessionLocal
 from app.core.security import hash_password
@@ -112,6 +113,7 @@ def main() -> None:
             db, email=USER_EMAIL, first_name="Demo", last_name="User", role=UserRole.USER, password=args.user_password
         )
 
+        now = datetime.now(timezone.utc)
         plan_a = _create_plan(
             db,
             admin=admin,
@@ -120,7 +122,7 @@ def main() -> None:
             frequency="monthly",
             member_count=5,
             rounds=10,
-            start_date="2026-09-01T00:00:00Z",
+            start_date=(now + timedelta(days=14)).strftime("%Y-%m-%dT00:00:00Z"),
         )
         _create_plan(
             db,
@@ -130,7 +132,7 @@ def main() -> None:
             frequency="weekly",
             member_count=4,
             rounds=8,
-            start_date="2026-08-20T00:00:00Z",
+            start_date=(now + timedelta(days=7)).strftime("%Y-%m-%dT00:00:00Z"),
         )
 
         # Mock wallet funding (creates FUNDING transactions + balance).

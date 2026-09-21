@@ -10,6 +10,9 @@ from app.models.payment import Payment
 from app.models.refresh_token import RefreshToken
 from app.models.savings_account import SavingsAccount
 from app.models.savings_goal import SavingsGoal
+from app.models.savings_plan import SavingsPlan
+from app.models.savings_plan_enrollment import SavingsPlanEnrollment
+from app.models.savings_plan_schedule import SavingsPlanSchedule
 from app.models.support_message import SupportMessage
 from app.models.support_thread import SupportThread
 from app.models.transaction import Transaction
@@ -30,6 +33,9 @@ __all__ = [
     "RefreshToken",
     "SavingsAccount",
     "SavingsGoal",
+    "SavingsPlan",
+    "SavingsPlanEnrollment",
+    "SavingsPlanSchedule",
     "SupportMessage",
     "SupportThread",
     "Transaction",

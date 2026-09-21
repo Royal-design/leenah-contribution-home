@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { ContributionProgress } from "@/components/contributions/contribution-progress"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,6 +17,7 @@ import { FundContributionDialog } from "@/components/forms/fund-contribution-dia
 import { useContribution, useJoinContribution, useLeaveContribution } from "@/hooks/queries/use-contributions"
 import { useAuthStore } from "@/stores/auth-store"
 import { formatDate, formatLongDate, formatNaira, getInitials } from "@/lib/format"
+import { planHasStarted } from "@/lib/dates"
 import { cn } from "@/lib/utils"
 
 export default function ContributionDetailPage() {
@@ -81,11 +83,11 @@ export default function ContributionDetailPage() {
           <p className="mt-1 text-sm text-muted-foreground">{contribution.description}</p>
         </div>
         <div className="flex items-center gap-2">
-          {!currentMember && contribution.isOpen && contribution.status !== "completed" && (
+          {!currentMember && contribution.isOpen && contribution.status !== "completed" && !planHasStarted(contribution.startDate) && (
             <Button
               onClick={() =>
                 joinContribution.mutate(contribution.id, {
-                  onSuccess: () => router.push("/contributions"),
+                  onSuccess: () => router.refresh(),
                 })
               }
               disabled={joinContribution.isPending}
@@ -93,6 +95,11 @@ export default function ContributionDetailPage() {
               <UserPlus />
               {joinContribution.isPending ? "Joining…" : "Join"}
             </Button>
+          )}
+          {!currentMember && planHasStarted(contribution.startDate) && (
+            <Badge variant="outline" className="border-transparent bg-warning/15 text-warning">
+              Already started
+            </Badge>
           )}
           {!withdrawalAvailable && contribution.status === "active" && currentMember && (
             <Button onClick={() => setFundOpen(true)}>

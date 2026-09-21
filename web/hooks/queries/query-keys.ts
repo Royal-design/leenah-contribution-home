@@ -8,6 +8,12 @@ export const queryKeys = {
     all: ["savings"] as const,
     goals: ["savings", "goals"] as const,
   },
+  savingsPlans: {
+    all: ["savings-plans"] as const,
+    mine: ["savings-plans", "mine"] as const,
+    open: ["savings-plans", "open"] as const,
+    detail: (id: string) => ["savings-plans", id] as const,
+  },
   savingsGrowth: ["savings-growth"] as const,
   wallet: {
     all: ["wallet"] as const,
@@ -56,6 +62,12 @@ export const queryKeys = {
     all: ["admin-contributions"] as const,
     list: (filters: unknown) => ["admin-contributions", filters] as const,
     detail: (id: string) => ["admin-contributions", id] as const,
+  },
+  adminSavingsPlans: {
+    all: ["admin-savings-plans"] as const,
+    list: (filters: unknown) => ["admin-savings-plans", filters] as const,
+    detail: (id: string) => ["admin-savings-plans", id] as const,
+    enrollments: (id: string) => ["admin-savings-plans", id, "enrollments"] as const,
   },
   adminTransactions: {
     all: ["admin-transactions"] as const,

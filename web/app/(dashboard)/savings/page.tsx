@@ -1,43 +1,46 @@
 "use client"
 
 import * as React from "react"
-import { Plus, ArrowLeftRight } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Plus, ArrowLeftRight, PiggyBank, Wallet, TrendingUp } from "lucide-react"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { SectionHeader } from "@/components/shared/section-header"
 import { DashboardStatCard } from "@/components/dashboard/dashboard-stat-card"
-import { SavingsGoalCard } from "@/components/savings/savings-goal-card"
 import { SavingsGrowthChart } from "@/components/charts/charts"
 import { TransactionsList } from "@/components/transactions/transaction-list"
+import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
 import { PageSkeleton } from "@/components/shared/skeletons"
 import { FundingDialog } from "@/components/forms/funding-dialog"
 import { WithdrawDialog } from "@/components/forms/withdraw-dialog"
-import { CreateGoalDialog } from "@/components/forms/create-goal-dialog"
+import { PlanCard } from "@/components/plans/plan-card"
 import { useSavings, useSavingsGrowth } from "@/hooks/queries/use-savings"
+import { useMySavingsPlans } from "@/hooks/queries/use-savings-plans"
 import { useRecentTransactions } from "@/hooks/queries/use-transactions"
 import { formatNaira } from "@/lib/format"
-import { PiggyBank, Wallet, TrendingUp } from "lucide-react"
 
 export default function SavingsPage() {
+  const router = useRouter()
   const savings = useSavings()
   const growth = useSavingsGrowth()
+  const myPlans = useMySavingsPlans({ pageSize: 100 })
   const recentTxns = useRecentTransactions(4)
   const [fundOpen, setFundOpen] = React.useState(false)
   const [withdrawOpen, setWithdrawOpen] = React.useState(false)
-  const [createOpen, setCreateOpen] = React.useState(false)
 
-  if (savings.isPending || growth.isPending) {
+  if (savings.isPending || growth.isPending || myPlans.isPending) {
     return <PageSkeleton />
   }
 
-  const totalGoals = savings.data?.goals.reduce((sum, goal) => sum + goal.current, 0) ?? 0
+  const plans = myPlans.data?.items ?? []
+  const inPlans = plans.reduce((sum, plan) => sum + plan.totalSaved, 0)
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Savings"
-        description="Set goals, grow your balance, and stay on track."
+        description="Your savings wallet and the plans you've joined."
       >
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setWithdrawOpen(true)}>
@@ -53,24 +56,25 @@ export default function SavingsPage() {
 
       <section aria-label="Savings summary" className="grid gap-4 sm:grid-cols-3">
         <DashboardStatCard
-          title="Total Savings"
+          title="Wallet balance"
           value={formatNaira(savings.data?.balance ?? 0)}
-          description="Available balance"
+          description="Available to fund plans"
           icon={PiggyBank}
           tone="success"
         />
         <DashboardStatCard
-          title="Lifetime Saved"
-          value={formatNaira(savings.data?.totalSaved ?? 0)}
-          description={`Across ${savings.data?.goals.length ?? 0} goals`}
-          icon={TrendingUp}
+          title="Saved in plans"
+          value={formatNaira(inPlans)}
+          description={`Across ${plans.length} savings plan${plans.length === 1 ? "" : "s"}`}
+          icon={Wallet}
           tone="info"
         />
         <DashboardStatCard
-          title="In Goals"
-          value={formatNaira(totalGoals)}
-          description="Allocated to savings goals"
-          icon={Wallet}
+          title="Lifetime saved"
+          value={formatNaira(savings.data?.totalSaved ?? 0)}
+          description="All-time savings"
+          icon={TrendingUp}
+          tone="warning"
         />
       </section>
 
@@ -78,21 +82,34 @@ export default function SavingsPage() {
         <SavingsGrowthChart data={growth.data ?? []} />
       </section>
 
-      <section aria-label="Savings goals">
+      <section aria-label="My savings plans">
         <SectionHeader
-          title="Savings goals"
-          description="Track what you're saving towards."
-          action={
-            <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus />
-              New goal
-            </Button>
-          }
+          title="My savings plans"
+          description="Plans created by LCH that you've joined."
         />
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {savings.data?.goals.map((goal) => (
-            <SavingsGoalCard key={goal.id} goal={goal} href={`/savings/${goal.id}`} />
-          ))}
+        <div className="mt-4">
+          {plans.length === 0 ? (
+            <EmptyState
+              title="No savings plans yet"
+              description="Join an admin-created savings plan to start saving toward a goal automatically."
+              action={{
+                label: "Explore savings plans",
+                onAction: () => router.push("/plans"),
+              }}
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {plans.map((plan) => (
+                <PlanCard
+                  key={plan.id}
+                  type="savings"
+                  plan={plan}
+                  href={`/plans/savings/${plan.id}`}
+                  joined
+                />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -107,8 +124,11 @@ export default function SavingsPage() {
       </section>
 
       <FundingDialog open={fundOpen} onOpenChange={setFundOpen} />
-      <WithdrawDialog open={withdrawOpen} onOpenChange={setWithdrawOpen} balance={savings.data?.balance ?? 0} />
-      <CreateGoalDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <WithdrawDialog
+        open={withdrawOpen}
+        onOpenChange={setWithdrawOpen}
+        balance={savings.data?.balance ?? 0}
+      />
     </div>
   )
 }

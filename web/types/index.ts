@@ -26,6 +26,17 @@ export type ContributionStatus =
   | "paused"
   | "draft"
 
+export type SavingsPlanStatus =
+  | "active"
+  | "upcoming"
+  | "completed"
+  | "paused"
+  | "draft"
+
+export type ScheduleStatus = "paid" | "pending" | "upcoming"
+
+export type EnrollmentStatus = "active" | "left"
+
 export interface ContributionMember {
   id: string
   userId?: string
@@ -77,6 +88,65 @@ export interface Contribution {
 }
 
 export type SavingsGoalStatus = "active" | "paused" | "completed"
+
+export interface SavingsPlanScheduleEntry {
+  id: number
+  period: string
+  label: string | null
+  dueDate: string
+  status: ScheduleStatus
+  amount: number
+  paidAt?: string
+  attemptCount: number
+  failureReason?: string | null
+}
+
+export interface SavingsPlanEnrollment {
+  id: string
+  planId: string
+  userId: string
+  totalSaved: number
+  nextPaymentDate?: string | null
+  status: EnrollmentStatus
+  joinedAt: string
+}
+
+export interface SavingsPlan {
+  id: string
+  name: string
+  description: string
+  organization?: string
+  amount: number
+  targetAmount?: number
+  frequency: Frequency
+  durationMonths?: number
+  startDate: string
+  endDate?: string
+  nextPaymentDate?: string | null
+  lastPaymentDate?: string | null
+  rounds: number
+  totalSaved: number
+  totalExpected: number
+  progress: number
+  status: SavingsPlanStatus
+  isOpen: boolean
+  enrollCount: number
+  createdBy: string
+  createdAt: string
+  enrollment?: SavingsPlanEnrollment | null
+  schedule: SavingsPlanScheduleEntry[]
+}
+
+export interface SavingsPlanEnrollmentDetail {
+  id: string
+  userId: string
+  userName: string
+  userEmail?: string
+  totalSaved: number
+  nextPaymentDate?: string | null
+  status: EnrollmentStatus
+  joinedAt: string
+}
 
 export interface SavingsGoal {
   id: string
@@ -253,6 +323,15 @@ export interface AdminStats {
   contributionStatus: Array<{
     name: string
     value: number
+  }>
+  totalPlans: number
+  activeSavingsPlans: number
+  activePlans: number
+  totalInContributionPlans: number
+  totalInSavingsPlans: number
+  planVolume: Array<{
+    month: string
+    volume: number
   }>
 }
 

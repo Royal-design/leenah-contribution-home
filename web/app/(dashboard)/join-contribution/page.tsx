@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Pagination } from "@/components/ui/pagination"
 import { formatDate, formatNaira } from "@/lib/format"
+import { planHasStarted } from "@/lib/dates"
 import { useOpenContributions, useJoinContribution } from "@/hooks/queries/use-contributions"
 import { cn } from "@/lib/utils"
 import type { Contribution } from "@/types"
@@ -25,7 +26,9 @@ export default function JoinContributionPage() {
   const [page, setPage] = React.useState(1)
   const openContributions = useOpenContributions({ page, pageSize: PAGE_SIZE })
 
-  const plans = openContributions.data?.items ?? []
+  const plans = (openContributions.data?.items ?? []).filter(
+    (plan) => !planHasStarted(plan.startDate)
+  )
   const [planId, setPlanId] = React.useState<string>("")
 
   const selectedPlan = plans.find((plan) => plan.id === planId) ?? null
@@ -33,7 +36,7 @@ export default function JoinContributionPage() {
   function onJoin() {
     if (!planId) return
     joinContribution.mutate(planId, {
-      onSuccess: () => router.push("/contributions"),
+      onSuccess: () => router.push(`/contributions/${planId}`),
     })
   }
 

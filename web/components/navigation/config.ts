@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import {
   LayoutDashboard,
-  Users,
   PiggyBank,
   ArrowLeftRight,
   Bell,
@@ -10,6 +9,8 @@ import {
   Wallet,
   LifeBuoy,
   ScrollText,
+  Compass,
+  Target,
 } from "lucide-react"
 
 export interface NavItem {
@@ -27,9 +28,9 @@ export const userNavGroups: Array<{
     label: "Main",
     items: [
       { label: "Overview", href: "/dashboard", icon: LayoutDashboard, exact: true },
+      { label: "Explore Plans", href: "/plans", icon: Compass },
+      { label: "My Plans", href: "/my-plans", icon: Target },
       { label: "Wallet", href: "/wallet", icon: Wallet },
-      { label: "Contributions", href: "/contributions", icon: Users },
-      { label: "Savings", href: "/savings", icon: PiggyBank },
       { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
       { label: "Notifications", href: "/notifications", icon: Bell },
     ],
@@ -52,7 +53,8 @@ export const adminNavGroups: Array<{
     label: "Admin",
     items: [
       { label: "Overview", href: "/admin/dashboard", icon: LayoutDashboard, exact: true },
-      { label: "Contributions", href: "/admin/contributions", icon: Users },
+      { label: "Savings Plans", href: "/admin/savings-plans", icon: PiggyBank },
+      { label: "Contributions", href: "/admin/contributions", icon: Compass },
       { label: "Users", href: "/admin/users", icon: User },
       { label: "Withdrawals", href: "/admin/withdrawals", icon: Wallet },
       { label: "Transactions", href: "/admin/transactions", icon: ArrowLeftRight },
@@ -75,9 +77,8 @@ export const mobilePrimaryNav: Array<{
   icon: LucideIcon
 }> = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Wallet", href: "/wallet", icon: Wallet },
-  { label: "Contributions", href: "/contributions", icon: Users },
-  { label: "Transactions", href: "/transactions", icon: ArrowLeftRight },
+  { label: "Explore", href: "/plans", icon: Compass },
+  { label: "My Plans", href: "/my-plans", icon: Target },
   { label: "Profile", href: "/profile", icon: User },
 ]
 
@@ -87,7 +88,7 @@ export const adminMobilePrimaryNav: Array<{
   icon: LucideIcon
 }> = [
   { label: "Overview", href: "/admin/dashboard", icon: LayoutDashboard },
+  { label: "Savings", href: "/admin/savings-plans", icon: PiggyBank },
+  { label: "Contributions", href: "/admin/contributions", icon: Compass },
   { label: "Users", href: "/admin/users", icon: User },
-  { label: "Transactions", href: "/admin/transactions", icon: ArrowLeftRight },
-  { label: "Settings", href: "/admin/settings", icon: Settings },
 ]

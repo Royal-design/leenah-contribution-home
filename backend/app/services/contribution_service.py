@@ -34,6 +34,7 @@ from app.schemas.contribution import (
 )
 from app.services.notification_service import notification_service
 from app.services.wallet_service import make_reference, wallet_service
+from app.utils.dates import add_months, end_date_from_duration, period_dates, start_date_in_past
 
 FREQUENCY_DAYS = {
     "weekly": 7,
@@ -119,8 +120,8 @@ class ContributionService:
         }
 
     def _compute_dates(self, start_date: datetime, frequency: str, rounds: int) -> list[datetime]:
-        step = timedelta(days=FREQUENCY_DAYS.get(frequency, 30))
-        return [start_date + step * i for i in range(rounds)]
+        """Calendar-aware due dates (month-end / leap-year safe for monthly)."""
+        return period_dates(start_date, frequency, rounds)
 
     def _member_id_for(self, db: Session, contribution_id: uuid.UUID, user_id: uuid.UUID) -> uuid.UUID | None:
         member = contribution_member_repository.get(db, contribution_id, user_id)
@@ -172,6 +173,21 @@ class ContributionService:
         else:
             withdrawal_rule = None
 
+        end_date = payload.end_date
+        if end_date is None:
+            if payload.duration_months:
+                end_date = end_date_from_duration(payload.start_date, payload.duration_months)
+            else:
+                dates = self._compute_dates(payload.start_date, payload.frequency.value, payload.rounds)
+                end_date = dates[-1] if dates else payload.start_date
+
+        if start_date_in_past(payload.start_date):
+            raise AppException(
+                message="Start date cannot be in the past.",
+                status_code=422,
+                error_code="START_DATE_IN_PAST",
+            )
+
         contribution = contribution_repository.create(
             db,
             created_by=user.id,
@@ -183,7 +199,7 @@ class ContributionService:
             member_count=payload.member_count,
             rounds=payload.rounds,
             start_date=payload.start_date,
-            end_date=payload.end_date,
+            end_date=end_date,
             withdrawal_date=payload.fixed_withdrawal_date,
             withdrawal_rule=withdrawal_rule,
             status=ContributionStatus.UPCOMING,
@@ -412,9 +428,12 @@ class ContributionService:
                 amount=contribution.amount * contribution.member_count,
             )
         else:
-            step = timedelta(days=FREQUENCY_DAYS.get(contribution.frequency.value, 30))
             round_number = member.payout_position or member.position
-            scheduled_date = contribution.start_date + step * (round_number - 1)
+            if contribution.frequency.value in ("weekly", "biweekly"):
+                step = timedelta(days=FREQUENCY_DAYS.get(contribution.frequency.value, 30))
+                scheduled_date = contribution.start_date + step * (round_number - 1)
+            else:
+                scheduled_date = add_months(contribution.start_date, round_number - 1)
             contribution_payout_repository.create(
                 db,
                 contribution_id=contribution.id,
@@ -433,6 +452,13 @@ class ContributionService:
         if not contribution.is_open or contribution.status not in (ContributionStatus.UPCOMING, ContributionStatus.ACTIVE):
             raise AppException(
                 message="This contribution is not open for joining.",
+                status_code=400,
+                error_code="NOT_ACCEPTING_MEMBERS",
+            )
+
+        if start_date_in_past(contribution.start_date):
+            raise AppException(
+                message="This contribution has already started and is not open for joining. Contact an admin to be added.",
                 status_code=400,
                 error_code="NOT_ACCEPTING_MEMBERS",
             )

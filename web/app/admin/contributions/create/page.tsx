@@ -24,6 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { useAdminCreateContribution } from "@/hooks/queries/use-admin"
+import { DURATION_PRESETS, isPastDate, endDateFromDuration } from "@/lib/dates"
 import { formatDate, formatNaira } from "@/lib/format"
 import type { ContributionStatus, Frequency } from "@/types"
 
@@ -51,7 +52,13 @@ const formSchema = z
       .positive("Amount must be greater than zero."),
     frequency: z.enum(["weekly", "biweekly", "monthly", "custom"], { message: "Select a frequency." }),
     startDate: z.string().min(1, "Choose a start date."),
-    endDate: z.string().min(1, "Choose an end date."),
+    durationPreset: z.string().min(1, "Choose a duration."),
+    customDuration: z.coerce
+      .number({ message: "Enter a valid number." })
+      .int()
+      .min(1, "At least 1 month.")
+      .max(240, "Maximum 240 months.")
+      .optional(),
     memberCount: z.coerce
       .number({ message: "Enter a valid number." })
       .int()
@@ -62,20 +69,42 @@ const formSchema = z
       .int()
       .min(1, "At least 1 round.")
       .max(120, "Maximum 120 rounds."),
-    withdrawalDate: z.string().min(1, "Choose a withdrawal date."),
+    withdrawalDate: z.string().optional(),
     status: z.enum(["draft", "active", "paused", "completed"], { message: "Select a status." }),
-    withdrawalRule: z.string().trim().min(5, "Describe the withdrawal rule."),
+    withdrawalRule: z.string().trim().optional(),
   })
-  .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
-    message: "End date must be on or after the start date.",
-    path: ["endDate"],
-  })
-  .refine((data) => new Date(data.withdrawalDate) >= new Date(data.endDate), {
-    message: "Withdrawal date must be on or after the end date.",
-    path: ["withdrawalDate"],
+  .superRefine((data, ctx) => {
+    if (data.durationPreset === "custom" && (!data.customDuration || data.customDuration < 1)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["customDuration"],
+        message: "Enter a duration in months.",
+      })
+    }
+    if (data.withdrawalDate && new Date(data.withdrawalDate) < new Date(data.startDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["withdrawalDate"],
+        message: "Withdrawal date must be on or after the start date.",
+      })
+    }
+    if (isPastDate(data.startDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["startDate"],
+        message: "Start date cannot be in the past.",
+      })
+    }
   })
 
 type FormValues = z.infer<typeof formSchema>
+
+function resolveDurationMonths(values: Pick<FormValues, "durationPreset" | "customDuration">) {
+  if (values.durationPreset === "custom") {
+    return Number(values.customDuration) || 0
+  }
+  return Number(values.durationPreset) || 0
+}
 
 export default function CreateContributionPage() {
   const router = useRouter()
@@ -90,7 +119,8 @@ export default function CreateContributionPage() {
       amount: 25000,
       frequency: "monthly",
       startDate: "",
-      endDate: "",
+      durationPreset: "12",
+      customDuration: 12,
       memberCount: 12,
       rounds: 12,
       withdrawalDate: "",
@@ -100,6 +130,10 @@ export default function CreateContributionPage() {
   })
 
   const watched = form.watch()
+  const durationMonths = resolveDurationMonths(watched)
+  const previewEndDate = watched.startDate && durationMonths > 0
+    ? endDateFromDuration(watched.startDate, durationMonths)
+    : ""
 
   function onSubmit(values: FormValues) {
     createContribution.mutate(
@@ -111,8 +145,8 @@ export default function CreateContributionPage() {
         memberCount: values.memberCount,
         rounds: values.rounds,
         startDate: values.startDate,
-        endDate: values.endDate,
-        withdrawalDate: values.withdrawalDate,
+        durationMonths: resolveDurationMonths(values),
+        withdrawalDate: values.withdrawalDate || undefined,
       },
       {
         onSuccess: () => router.push("/admin/contributions"),
@@ -134,7 +168,7 @@ export default function CreateContributionPage() {
 
       <PageHeader
         title="Create contribution plan"
-        description="Configure a new contribution plan for your users."
+        description="Configure a new contribution plan — the end date is calculated automatically."
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
@@ -282,7 +316,7 @@ export default function CreateContributionPage() {
                             {...field}
                           />
                           <FieldDescription>
-                            Number of contribution rounds.
+                            Contribution rounds. Auto-synced to the duration for monthly plans.
                           </FieldDescription>
                           <FieldError errors={form.formState.errors.rounds ? [form.formState.errors.rounds] : []} />
                         </>
@@ -322,7 +356,9 @@ export default function CreateContributionPage() {
           <Card>
             <CardHeader>
               <CardTitle>Schedule</CardTitle>
-              <CardDescription>Configure the plan dates.</CardDescription>
+              <CardDescription>
+                Pick a start date and a duration — the end date is calculated for you.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <FieldGroup>
@@ -344,25 +380,35 @@ export default function CreateContributionPage() {
                       )}
                     />
                   </Field>
+
                   <Field>
-                    <FieldLabel>End date</FieldLabel>
+                    <FieldLabel>Duration</FieldLabel>
                     <Controller
                       control={form.control}
-                      name="endDate"
+                      name="durationPreset"
                       render={({ field }) => (
                         <>
-                          <Input
-                            type="date"
-                            aria-invalid={!!form.formState.errors.endDate}
-                            {...field}
-                          />
-                          <FieldError errors={form.formState.errors.endDate ? [form.formState.errors.endDate] : []} />
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <SelectTrigger aria-invalid={!!form.formState.errors.durationPreset}>
+                              <SelectValue placeholder="Select duration" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DURATION_PRESETS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="custom">Custom</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FieldError errors={form.formState.errors.durationPreset ? [form.formState.errors.durationPreset] : []} />
                         </>
                       )}
                     />
                   </Field>
+
                   <Field>
-                    <FieldLabel>Withdrawal date</FieldLabel>
+                    <FieldLabel>Withdrawal date (optional)</FieldLabel>
                     <Controller
                       control={form.control}
                       name="withdrawalDate"
@@ -380,6 +426,37 @@ export default function CreateContributionPage() {
                   </Field>
                 </div>
 
+                {watched.durationPreset === "custom" && (
+                  <Field>
+                    <FieldLabel>Custom duration (months)</FieldLabel>
+                    <Controller
+                      control={form.control}
+                      name="customDuration"
+                      render={({ field }) => (
+                        <>
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            placeholder="e.g. 9"
+                            aria-invalid={!!form.formState.errors.customDuration}
+                            {...field}
+                          />
+                          <FieldDescription>Whole calendar months (1–240).</FieldDescription>
+                          <FieldError errors={form.formState.errors.customDuration ? [form.formState.errors.customDuration] : []} />
+                        </>
+                      )}
+                    />
+                  </Field>
+                )}
+
+                {previewEndDate && (
+                  <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
+                    Ends: <span className="font-medium text-foreground">{previewEndDate}</span>{" "}
+                    (calculated from start date + duration)
+                  </p>
+                )}
+
                 <Field>
                   <FieldLabel>Withdrawal rules</FieldLabel>
                   <Controller
@@ -390,13 +467,11 @@ export default function CreateContributionPage() {
                         <Textarea
                           rows={2}
                           placeholder="When and how members can withdraw."
-                          aria-invalid={!!form.formState.errors.withdrawalRule}
                           {...field}
                         />
                         <FieldDescription>
                           This rule is shown to members before they join.
                         </FieldDescription>
-                        <FieldError errors={form.formState.errors.withdrawalRule ? [form.formState.errors.withdrawalRule] : []} />
                       </>
                     )}
                   />
@@ -418,14 +493,26 @@ export default function CreateContributionPage() {
         </form>
 
         <aside className="lg:sticky lg:top-24 lg:self-start">
-          <PreviewSummary values={watched} />
+          <PreviewSummary
+            values={watched}
+            durationMonths={durationMonths}
+            endDate={previewEndDate}
+          />
         </aside>
       </div>
     </div>
   )
 }
 
-function PreviewSummary({ values }: { values: FormValues }) {
+function PreviewSummary({
+  values,
+  durationMonths,
+  endDate,
+}: {
+  values: FormValues
+  durationMonths: number
+  endDate: string
+}) {
   const amount = Number(values.amount) || 0
   const members = Number(values.memberCount) || 0
   const rounds = Number(values.rounds) || 0
@@ -448,9 +535,19 @@ function PreviewSummary({ values }: { values: FormValues }) {
           </p>
         </div>
         <div>
-          <p className="text-muted-foreground">Total expected</p>
+          <p className="text-muted-foreground">Total pool</p>
           <p className="font-medium tabular-nums">
             {formatNaira(totalExpected)} / {rounds} {rounds === 1 ? "round" : "rounds"}
+          </p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Duration</p>
+          <p className="font-medium">
+            {durationMonths > 0
+              ? durationMonths === 1
+                ? "1 month"
+                : `${durationMonths} months`
+              : "—"}
           </p>
         </div>
         <div>
@@ -459,20 +556,25 @@ function PreviewSummary({ values }: { values: FormValues }) {
         </div>
         <div>
           <p className="text-muted-foreground">Ends</p>
-          <p className="font-medium">{values.endDate ? formatDate(values.endDate) : "—"}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Withdrawal from</p>
           <p className="font-medium">
-            {values.withdrawalDate ? formatDate(values.withdrawalDate) : "—"}
+            {endDate ? formatDate(endDate) : "—"}
+            {endDate && <span className="text-xs text-muted-foreground"> (auto-calculated)</span>}
           </p>
         </div>
+        {values.withdrawalDate && (
+          <div>
+            <p className="text-muted-foreground">Withdrawal from</p>
+            <p className="font-medium">{formatDate(values.withdrawalDate)}</p>
+          </div>
+        )}
         <div>
           <p className="text-muted-foreground">Members</p>
           <p className="font-medium">{members}</p>
         </div>
         <Separator className="my-1" />
-        <p className="text-xs text-muted-foreground">Draft changes are not live yet.</p>
+        <p className="text-xs text-muted-foreground">
+          The end date is derived from the start date and duration on the server.
+        </p>
       </CardContent>
     </Card>
   )

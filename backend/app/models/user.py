@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from app.models.payment import Payment
     from app.models.refresh_token import RefreshToken
     from app.models.savings_account import SavingsAccount
+    from app.models.savings_plan_enrollment import SavingsPlanEnrollment
     from app.models.support_thread import SupportThread
     from app.models.transaction import Transaction
     from app.models.user_bank_account import UserBankAccount
@@ -76,6 +77,9 @@ class User(Base):
     savings_account: Mapped["SavingsAccount | None"] = relationship(back_populates="user", cascade="all, delete-orphan")
     withdrawals: Mapped[list["Withdrawal"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     memberships: Mapped[list["ContributionMember"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    savings_plan_enrollments: Mapped[list["SavingsPlanEnrollment"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     bank_accounts: Mapped[list["UserBankAccount"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="actor")
     support_threads: Mapped[list["SupportThread"]] = relationship(back_populates="user", cascade="all, delete-orphan")

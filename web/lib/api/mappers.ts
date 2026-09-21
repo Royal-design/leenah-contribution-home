@@ -10,6 +10,10 @@ import type {
   Role,
   SavingsAccount,
   SavingsGoal,
+  SavingsPlan,
+  SavingsPlanEnrollment,
+  SavingsPlanEnrollmentDetail,
+  SavingsPlanScheduleEntry,
   Transaction,
   TransactionStatus,
   TransactionType,
@@ -216,6 +220,140 @@ export function mapSavingsAccount(raw: RawSavingsAccount): SavingsAccount {
   }
 }
 
+/* --------------------------- Savings plans ----------------------------- */
+
+export interface RawSavingsPlanScheduleEntry {
+  id: number
+  period: string
+  label: string | null
+  due_date: string
+  status: "paid" | "pending" | "upcoming"
+  amount: number
+  paid_at: string | null
+  attempt_count: number
+  failure_reason: string | null
+}
+
+export interface RawSavingsPlanEnrollment {
+  id: string
+  plan_id: string
+  user_id: string
+  total_saved: number
+  next_payment_date: string | null
+  status: "active" | "left"
+  joined_at: string
+}
+
+export interface RawSavingsPlanEnrollmentDetail {
+  id: string
+  user_id: string
+  user_name: string
+  user_email: string | null
+  total_saved: number
+  next_payment_date: string | null
+  status: "active" | "left"
+  joined_at: string
+}
+
+export interface RawSavingsPlan {
+  id: string
+  name: string
+  description: string | null
+  organization: string | null
+  amount: number
+  target_amount: number | null
+  frequency: "weekly" | "biweekly" | "monthly" | "custom"
+  duration_months: number | null
+  start_date: string
+  end_date: string | null
+  next_payment_date: string | null
+  last_payment_date: string | null
+  rounds: number
+  total_saved: number
+  total_expected: number
+  progress: number
+  status: "active" | "upcoming" | "completed" | "paused" | "draft"
+  is_open: boolean
+  enroll_count: number
+  created_by: string
+  created_at: string
+  enrollment?: RawSavingsPlanEnrollment | null
+  schedule?: RawSavingsPlanScheduleEntry[]
+}
+
+export function mapSavingsPlanSchedule(
+  raw: RawSavingsPlanScheduleEntry
+): SavingsPlanScheduleEntry {
+  return {
+    id: raw.id,
+    period: raw.period,
+    label: raw.label,
+    dueDate: raw.due_date,
+    status: raw.status,
+    amount: raw.amount,
+    paidAt: raw.paid_at ?? undefined,
+    attemptCount: raw.attempt_count,
+    failureReason: raw.failure_reason ?? null,
+  }
+}
+
+export function mapSavingsPlanEnrollment(
+  raw: RawSavingsPlanEnrollment
+): SavingsPlanEnrollment {
+  return {
+    id: raw.id,
+    planId: raw.plan_id,
+    userId: raw.user_id,
+    totalSaved: raw.total_saved,
+    nextPaymentDate: raw.next_payment_date ?? null,
+    status: raw.status,
+    joinedAt: raw.joined_at,
+  }
+}
+
+export function mapSavingsPlanEnrollmentDetail(
+  raw: RawSavingsPlanEnrollmentDetail
+): SavingsPlanEnrollmentDetail {
+  return {
+    id: raw.id,
+    userId: raw.user_id,
+    userName: raw.user_name,
+    userEmail: raw.user_email ?? undefined,
+    totalSaved: raw.total_saved,
+    nextPaymentDate: raw.next_payment_date ?? null,
+    status: raw.status,
+    joinedAt: raw.joined_at,
+  }
+}
+
+export function mapSavingsPlan(raw: RawSavingsPlan): SavingsPlan {
+  return {
+    id: raw.id,
+    name: raw.name,
+    description: raw.description ?? "",
+    organization: raw.organization ?? undefined,
+    amount: raw.amount,
+    targetAmount: raw.target_amount ?? undefined,
+    frequency: raw.frequency,
+    durationMonths: raw.duration_months ?? undefined,
+    startDate: raw.start_date,
+    endDate: raw.end_date ?? undefined,
+    nextPaymentDate: raw.next_payment_date ?? null,
+    lastPaymentDate: raw.last_payment_date ?? null,
+    rounds: raw.rounds,
+    totalSaved: raw.total_saved,
+    totalExpected: raw.total_expected,
+    progress: raw.progress,
+    status: raw.status,
+    isOpen: raw.is_open,
+    enrollCount: raw.enroll_count,
+    createdBy: raw.created_by,
+    createdAt: raw.created_at,
+    enrollment: raw.enrollment ? mapSavingsPlanEnrollment(raw.enrollment) : null,
+    schedule: (raw.schedule ?? []).map(mapSavingsPlanSchedule),
+  }
+}
+
 /* ----------------------------- Transactions ----------------------------- */
 
 export interface RawTransaction {
@@ -342,6 +480,12 @@ export interface RawAdminStats {
   user_growth: Array<{ month: string; users: number }>
   contribution_volume: Array<{ month: string; volume: number }>
   contribution_status: Array<{ name: string; value: number }>
+  total_plans?: number
+  active_savings_plans?: number
+  active_plans?: number
+  total_in_contribution_plans?: number
+  total_in_savings_plans?: number
+  plan_volume?: Array<{ month: string; volume: number }>
 }
 
 export function mapAdminStats(raw: RawAdminStats): AdminStats {
@@ -354,6 +498,12 @@ export function mapAdminStats(raw: RawAdminStats): AdminStats {
     userGrowth: raw.user_growth,
     contributionVolume: raw.contribution_volume,
     contributionStatus: raw.contribution_status,
+    totalPlans: raw.total_plans ?? 0,
+    activeSavingsPlans: raw.active_savings_plans ?? 0,
+    activePlans: raw.active_plans ?? 0,
+    totalInContributionPlans: raw.total_in_contribution_plans ?? 0,
+    totalInSavingsPlans: raw.total_in_savings_plans ?? 0,
+    planVolume: raw.plan_volume ?? [],
   }
 }
 

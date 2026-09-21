@@ -6,6 +6,7 @@ creator's user row.
 """
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,10 @@ from app.models.user import User
 from app.services.notification_service import notification_service
 
 client = TestClient(app)
+
+
+def _future_iso(days: int = 15) -> str:
+    return (datetime.now(timezone.utc) + timedelta(days=days)).strftime("%Y-%m-%dT00:00:00Z")
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -100,7 +105,7 @@ def _create_contribution(admin_headers: dict, **overrides) -> dict:
         "frequency": "monthly",
         "member_count": 5,
         "rounds": 10,
-        "start_date": "2026-09-01T00:00:00Z",
+        "start_date": _future_iso(),
         "withdrawal_rule": "on_schedule",
     }
     payload.update(overrides)

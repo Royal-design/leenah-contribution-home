@@ -2,182 +2,236 @@
 
 import * as React from "react"
 import Link from "next/link"
-import {
-  Wallet,
-  PiggyBank,
-  Users,
-  CalendarClock,
-  Plus,
-  ArrowLeftRight,
-  Target,
-} from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Wallet, CalendarClock, Compass, ArrowLeftRight, PiggyBank, Target } from "lucide-react"
 
 import { BalanceSummary } from "@/components/dashboard/balance-summary"
 import { DashboardStatCard } from "@/components/dashboard/dashboard-stat-card"
-import {
-  ContributionActivityChart,
-  SavingsGrowthChart,
-} from "@/components/charts/charts"
 import { QuickActions } from "@/components/dashboard/quick-actions"
 import { TransactionsList } from "@/components/transactions/transaction-list"
-import { ContributionCard } from "@/components/contributions/contribution-card"
+import { PlanCard } from "@/components/plans/plan-card"
 import { PageHeader } from "@/components/shared/page-header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { SectionHeader } from "@/components/shared/section-header"
+import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
 import { PageSkeleton } from "@/components/shared/skeletons"
-import { SectionHeader } from "@/components/shared/section-header"
 import { FundingDialog } from "@/components/forms/funding-dialog"
 import { WithdrawDialog } from "@/components/forms/withdraw-dialog"
 import { useAuthStore } from "@/stores/auth-store"
-import { useContributions } from "@/hooks/queries/use-contributions"
-import { useSavings, useSavingsGrowth } from "@/hooks/queries/use-savings"
+import { useContributions, useOpenContributions } from "@/hooks/queries/use-contributions"
+import { useSavings } from "@/hooks/queries/use-savings"
+import { useMySavingsPlans, useOpenSavingsPlans } from "@/hooks/queries/use-savings-plans"
 import { useRecentTransactions } from "@/hooks/queries/use-transactions"
-import { formatNaira, formatShortMonth } from "@/lib/format"
+import { formatDate, formatNaira } from "@/lib/format"
+import { planHasStarted } from "@/lib/dates"
 
 export default function DashboardPage() {
+  const router = useRouter()
   const user = useAuthStore((state) => state.user)
-  const contributions = useContributions()
   const savings = useSavings()
-  const growth = useSavingsGrowth()
+  const mySavingsPlans = useMySavingsPlans({ pageSize: 100 })
+  const contributions = useContributions({ pageSize: 100 })
+  const openSavings = useOpenSavingsPlans({ pageSize: 3 })
+  const openContributions = useOpenContributions({ pageSize: 3 })
   const recentTxns = useRecentTransactions(5)
   const [fundingOpen, setFundingOpen] = React.useState(false)
   const [withdrawOpen, setWithdrawOpen] = React.useState(false)
 
-  const isLoading = contributions.isPending || savings.isPending || growth.isPending
+  const isLoading =
+    savings.isPending ||
+    mySavingsPlans.isPending ||
+    contributions.isPending ||
+    openSavings.isPending ||
+    openContributions.isPending
 
   if (isLoading) {
     return <PageSkeleton />
   }
 
-  const contributionItems = contributions.data?.items ?? []
+  const joinedSavings = mySavingsPlans.data?.items ?? []
+  const joinedContributions = contributions.data?.items ?? []
+  const activeSavings = joinedSavings.filter((plan) => plan.status !== "completed")
+  const activeContributions = joinedContributions.filter((plan) => plan.status !== "completed")
 
-  const activeContributionsList = contributionItems.filter(
-    (contribution) => contribution.status !== "completed"
-  )
-  const totalContributions = contributionItems.reduce(
-    (sum, contribution) => sum + contribution.totalContributed,
+  const inSavingsPlans = activeSavings.reduce((sum, plan) => sum + plan.totalSaved, 0)
+  const inContributions = activeContributions.reduce(
+    (sum, plan) => sum + plan.totalContributed,
     0
   )
-  const totalBalance = (savings.data?.balance ?? 0) + totalContributions
+  const totalInPlans = inSavingsPlans + inContributions
+  const activePlanCount = activeSavings.length + activeContributions.length
 
-  const next = contributionItems
-    .filter((contribution) => contribution.status !== "completed")
-    .sort(
-      (a, b) =>
-        new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime()
-    )[0]
+  const availableSavings = (openSavings.data?.items ?? []).filter(
+    (plan) => !planHasStarted(plan.startDate)
+  )
+  const availableContributions = (openContributions.data?.items ?? []).filter(
+    (plan) =>
+      !plan.members.some((member) => member.userId === user?.id) &&
+      !planHasStarted(plan.startDate)
+  )
 
-  const contributionActivity = contributionItems.map((contribution) => ({
-    month: formatShortMonth(contribution.startDate),
-    contributions: contribution.totalContributed,
-  }))
+  const upcomingPayments: Array<{ amount: number; dueDate: string }> = [
+    ...activeContributions
+      .filter((plan) => plan.nextPaymentDate)
+      .map((plan) => ({ amount: plan.amount, dueDate: plan.nextPaymentDate })),
+    ...activeSavings
+      .filter((plan) => plan.enrollment?.nextPaymentDate || plan.nextPaymentDate)
+      .map((plan) => ({
+        amount: plan.amount,
+        dueDate: (plan.enrollment?.nextPaymentDate ?? plan.nextPaymentDate) as string,
+      })),
+  ]
+  const nextPayment = upcomingPayments.sort(
+    (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+  )[0]
+
+  const myPlanItems = [
+    ...activeSavings.map((plan) => ({ type: "savings" as const, plan })),
+    ...activeContributions.map((plan) => ({ type: "contribution" as const, plan })),
+  ].slice(0, 3)
+
+  const availableItems = [
+    ...availableSavings.map((plan) => ({ type: "savings" as const, plan })),
+    ...availableContributions.map((plan) => ({ type: "contribution" as const, plan })),
+  ].slice(0, 3)
 
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader
         title={`Good ${getGreeting()}, ${user?.firstName ?? ""}`}
-        description="Here's what's happening with your money today."
-      />
+        description="Here's what you can do with your money today."
+      >
+        <Button size="sm" render={<Link href="/plans" />}>
+          <Compass />
+          Explore plans
+        </Button>
+      </PageHeader>
 
-      {/* 1. Financial summary */}
+      {/* Financial summary */}
       <section aria-label="Financial summary">
         <BalanceSummary
           balance={savings.data?.balance ?? 0}
           wallet={savings.data?.totalSaved ?? 0}
-          savings={savings.data?.totalWithdrawn ?? 0}
-          activePlanCount={activeContributionsList.length}
-          activePlanAmount={totalContributions}
+          savings={inSavingsPlans}
+          activePlanCount={activePlanCount}
+          activePlanAmount={totalInPlans}
           onDeposit={() => setFundingOpen(true)}
           onWithdraw={() => setWithdrawOpen(true)}
         />
       </section>
 
-      {/* 2. Financial health */}
-      <section aria-label="Financial health">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <DashboardStatCard
-            title="Reserved"
-            value={formatNaira(savings.data?.reserved ?? 0)}
-            description="Locked for pending withdrawals"
-            icon={PiggyBank}
-            tone="warning"
-          />
-          <DashboardStatCard
-            title="Lifetime saved"
-            value={formatNaira(savings.data?.totalSaved ?? 0)}
-            description="Total savings made"
-            icon={Wallet}
-            tone="success"
-          />
-          <DashboardStatCard
-            title="Next contribution"
-            value={formatNaira(next?.amount ?? 0)}
-            description={
-              next && next.nextPaymentDate
-                ? `Due ${next.nextPaymentDate.split("T")[0]}`
-                : "No due payments"
-            }
-            icon={CalendarClock}
-            tone="warning"
-          />
-          <DashboardStatCard
-            title="In contributions"
-            value={formatNaira(totalContributions)}
-            description={`${activeContributionsList.length} active ${activeContributionsList.length === 1 ? "plan" : "plans"}`}
-            icon={Users}
-            tone="info"
-          />
-        </div>
-      </section>
-
-      {/* 3. Quick actions */}
+      {/* Primary actions */}
       <section aria-label="Quick actions">
         <QuickActions
           actions={[
-            { label: "Add Money", icon: Plus, onClick: () => setFundingOpen(true) },
-            { label: "Start Saving", icon: Target, href: "/savings" },
-            { label: "Join Contribution", icon: Users, href: "/join-contribution" },
-            { label: "Withdraw", icon: ArrowLeftRight, href: "/savings" },
+            { label: "Explore plans", icon: Compass, href: "/plans", description: "See what you can join" },
+            { label: "My plans", icon: Target, href: "/my-plans", description: "Track your progress" },
+            { label: "Add money", icon: ArrowLeftRight, onClick: () => setFundingOpen(true), description: "Top up your wallet" },
+            { label: "Withdraw", icon: PiggyBank, onClick: () => setWithdrawOpen(true), description: "Move funds out" },
           ]}
         />
       </section>
 
-      {/* 4. Plan progress */}
-      {activeContributionsList.length > 0 && (
-        <section aria-label="Active plans">
+      {/* Key metrics */}
+      <section aria-label="Key metrics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <DashboardStatCard
+          title="Total in plans"
+          value={formatNaira(totalInPlans)}
+          description={`${activePlanCount} active ${activePlanCount === 1 ? "plan" : "plans"}`}
+          icon={Wallet}
+          tone="success"
+        />
+        <DashboardStatCard
+          title="Savings plans"
+          value={activeSavings.length.toString()}
+          description={formatNaira(inSavingsPlans) + " saved"}
+          icon={PiggyBank}
+          tone="info"
+        />
+        <DashboardStatCard
+          title="Next payment"
+          value={formatNaira(nextPayment?.amount ?? 0)}
+          description={
+            nextPayment ? `Due ${formatDate(nextPayment.dueDate)}` : "No due payments"
+          }
+          icon={CalendarClock}
+          tone="warning"
+        />
+        <DashboardStatCard
+          title="Wallet balance"
+          value={formatNaira(savings.data?.balance ?? 0)}
+          description="Available to fund plans"
+          icon={Wallet}
+          tone="default"
+        />
+      </section>
+
+      {/* My plans */}
+      <section aria-label="My plans">
+        <SectionHeader
+          title="My plans"
+          description="Your active savings and contribution plans."
+          action={
+            <Button variant="ghost" size="sm" render={<Link href="/my-plans" />}>
+              View all
+            </Button>
+          }
+        />
+        <div className="mt-4">
+          {myPlanItems.length === 0 ? (
+            <EmptyState
+              title="No active plans yet"
+              description="Join a savings or contribution plan to start growing your money."
+              action={{ label: "Explore plans", onAction: () => router.push("/plans") }}
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {myPlanItems.map(({ type, plan }) => (
+                <PlanCard
+                  key={`${type}-${plan.id}`}
+                  type={type}
+                  plan={plan}
+                  href={type === "savings" ? `/plans/savings/${plan.id}` : `/contributions/${plan.id}`}
+                  joined
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Available plans */}
+      {availableItems.length > 0 && (
+        <section aria-label="Available plans">
           <SectionHeader
-            title="Plan progress"
-            description="Your contributions at a glance."
+            title="Available to join"
+            description="New plans published by LCH."
             action={
-              <Button
-                variant="ghost"
-                size="sm"
-                render={<Link href="/contributions" />}
-              >
-                View all
+              <Button variant="ghost" size="sm" render={<Link href="/plans" />}>
+                Explore all
               </Button>
             }
           />
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {activeContributionsList.slice(0, 3).map((contribution) => (
-              <ContributionCard key={contribution.id} contribution={contribution} />
+            {availableItems.map(({ type, plan }) => (
+              <PlanCard
+                key={`${type}-${plan.id}`}
+                type={type}
+                plan={plan}
+                href={type === "savings" ? `/plans/savings/${plan.id}` : `/contributions/${plan.id}`}
+              />
             ))}
           </div>
         </section>
       )}
 
-      {/* 5. Recent activity */}
+      {/* Recent activity */}
       <section aria-label="Recent activity">
         <SectionHeader
           title="Recent activity"
           description="Your latest transactions."
           action={
-            <Button
-              variant="ghost"
-              size="sm"
-              render={<Link href="/transactions" />}
-            >
+            <Button variant="ghost" size="sm" render={<Link href="/transactions" />}>
               View all
             </Button>
           }
@@ -185,55 +239,6 @@ export default function DashboardPage() {
         <div className="mt-4">
           <TransactionsList transactions={recentTxns.data ?? []} />
         </div>
-      </section>
-
-      {/* 6. Charts / analytics */}
-      {next && (
-        <section aria-label="Upcoming contribution" className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Upcoming contribution</CardTitle>
-              <CardDescription>{next.name}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="flex items-end justify-between gap-3">
-                <p className="text-2xl font-semibold tabular-nums sm:text-3xl">
-                  {formatNaira(next.amount)}
-                </p>
-                <Badge className="border-transparent bg-primary/10 text-primary dark:bg-primary/20">
-                  {next.nextPaymentDate.split("T")[0]}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Next payment due{" "}
-                <span className="font-medium text-foreground">
-                  {next.nextPaymentDate.split("T")[0]}
-                </span>
-              </p>
-              <Button
-                variant="secondary"
-                className="w-fit"
-                render={<Link href={`/contributions/${next.id}`} />}
-              >
-                View details
-              </Button>
-            </CardContent>
-          </Card>
-
-          <div className="flex flex-col">
-            <SectionHeader
-              title="Savings growth"
-              description="Your savings balance over time."
-            />
-            <div className="mt-4 flex-1">
-              <SavingsGrowthChart data={growth.data ?? []} />
-            </div>
-          </div>
-        </section>
-      )}
-
-      <section aria-label="Analytics" className="grid gap-4 xl:grid-cols-2">
-        <ContributionActivityChart data={contributionActivity} />
       </section>
 
       <FundingDialog open={fundingOpen} onOpenChange={setFundingOpen} />

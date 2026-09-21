@@ -32,6 +32,19 @@ class ContributionStatus(StrEnum):
     DRAFT = "draft"
 
 
+class SavingsPlanStatus(StrEnum):
+    ACTIVE = "active"
+    UPCOMING = "upcoming"
+    COMPLETED = "completed"
+    PAUSED = "paused"
+    DRAFT = "draft"
+
+
+class EnrollmentStatus(StrEnum):
+    ACTIVE = "active"
+    LEFT = "left"
+
+
 class ScheduleStatus(StrEnum):
     PAID = "paid"
     PENDING = "pending"

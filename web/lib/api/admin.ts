@@ -159,6 +159,7 @@ export async function apiAdminCreateContribution(payload: {
   memberCount: number
   rounds?: number
   startDate: string
+  durationMonths?: number
   endDate?: string
   withdrawalDate?: string
 }): Promise<Contribution> {
@@ -170,7 +171,8 @@ export async function apiAdminCreateContribution(payload: {
     member_count: payload.memberCount,
     rounds: payload.rounds ?? 12,
     start_date: payload.startDate,
-    end_date: payload.endDate,
+    duration_months: payload.durationMonths,
+    end_date: payload.durationMonths ? undefined : payload.endDate,
     withdrawal_rule: payload.withdrawalDate ? "fixed_date" : undefined,
     fixed_withdrawal_date: payload.withdrawalDate,
   })

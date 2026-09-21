@@ -1,17 +1,17 @@
 "use client"
 
-import * as React from "react"
 import { useRouter } from "next/navigation"
+import * as React from "react"
 
+import { FundingDialog } from "@/components/forms/funding-dialog"
+import { adminNavGroups, userNavGroups } from "@/components/navigation/config"
 import { DesktopSidebar } from "@/components/navigation/desktop-sidebar"
 import { MobileBottomNav } from "@/components/navigation/mobile-bottom-nav"
 import { TopHeader } from "@/components/navigation/top-header"
-import { FundingDialog } from "@/components/forms/funding-dialog"
 import { NotificationsListener } from "@/components/notifications/notifications-listener"
 import { PageSkeleton } from "@/components/shared/skeletons"
-import { adminNavGroups, userNavGroups } from "@/components/navigation/config"
-import { useAuthStore } from "@/stores/auth-store"
 import { isAdmin as hasAdminAccess } from "@/lib/roles"
+import { useAuthStore } from "@/stores/auth-store"
 
 export function AppShell({
   children,
@@ -55,14 +55,14 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-svh bg-muted/30">
+    <div className="min-h-svh bg-sidebar">
       <NotificationsListener />
       <DesktopSidebar navGroups={navGroups} />
 
       <div className="lg:pl-64">
         <TopHeader isAdmin={isAdmin} />
 
-        <main className="mx-auto max-w-7xl overflow-x-hidden px-4 pb-32 pt-6 sm:px-6 lg:pb-10">
+        <main className="mx-auto max-w-7xl overflow-x-hidden px-4 pt-6 pb-32 sm:px-6 lg:pb-10">
           {children}
         </main>
       </div>
@@ -74,10 +74,7 @@ export function AppShell({
         />
       </div>
 
-      <FundingDialog
-        open={fundingOpen}
-        onOpenChange={setFundingOpen}
-      />
+      <FundingDialog open={fundingOpen} onOpenChange={setFundingOpen} />
     </div>
   )
 }

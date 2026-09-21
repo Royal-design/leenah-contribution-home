@@ -166,6 +166,7 @@ export function useAdminCreateContribution() {
       memberCount: number
       rounds?: number
       startDate: string
+      durationMonths?: number
       endDate?: string
       withdrawalDate?: string
     }) => apiAdminCreateContribution(payload),
