@@ -365,6 +365,14 @@ class ContributionPayoutRepository:
         db.flush()
         return payout
 
+    def get(self, db: Session, payout_id: uuid.UUID) -> ContributionPayout | None:
+        return db.get(ContributionPayout, payout_id)
+
+    def get_locked(self, db: Session, payout_id: uuid.UUID) -> ContributionPayout | None:
+        return db.execute(
+            select(ContributionPayout).where(ContributionPayout.id == payout_id).with_for_update()
+        ).scalar_one_or_none()
+
     def list_for_contribution(self, db: Session, contribution_id: uuid.UUID) -> list[ContributionPayout]:
         return list(
             db.execute(
@@ -382,6 +390,28 @@ class ContributionPayoutRepository:
                     ContributionPayout.contribution_id == contribution_id,
                     ContributionPayout.member_id == member_id,
                 )
+                .order_by(ContributionPayout.round_number)
+            ).scalars().all()
+        )
+
+    def list_eligible_pending(self, db: Session) -> list[ContributionPayout]:
+        """Payouts whose round has completed but still await admin approval."""
+        return list(
+            db.execute(
+                select(ContributionPayout)
+                .where(
+                    ContributionPayout.status == PayoutStatus.PENDING,
+                    ContributionPayout.eligible_at.is_not(None),
+                )
+                .order_by(ContributionPayout.eligible_at)
+            ).scalars().all()
+        )
+
+    def list_pending(self, db: Session) -> list[ContributionPayout]:
+        return list(
+            db.execute(
+                select(ContributionPayout)
+                .where(ContributionPayout.status == PayoutStatus.PENDING)
                 .order_by(ContributionPayout.round_number)
             ).scalars().all()
         )

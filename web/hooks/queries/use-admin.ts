@@ -11,16 +11,22 @@ import {
   apiAdminListContributions,
   apiAdminListTransactions,
   apiAdminListWithdrawals,
+  apiAdminPayout,
+  apiAdminPendingPayouts,
   apiAdminRemoveContributionMember,
   apiAdminSetContributionMemberPosition,
   apiAdminUpdateContribution,
+  apiApprovePayout,
   apiBulkCreateUsers,
   apiDeleteUser,
   apiGetAdminRoles,
   apiGetAdminStats,
   apiGetAdminUser,
   apiGetAdminUsers,
+  apiGetCommissionSettings,
+  apiGetCommissionSummary,
   apiInviteUser,
+  apiRejectPayout,
   apiReviewWithdrawal,
   apiRevertTransaction,
   apiSendBroadcastMessage,
@@ -28,6 +34,8 @@ import {
   apiSetUserRole,
   apiSetUserRoles,
   apiSetUserStatus,
+  apiUpdateCommissionSettings,
+  type AdminPayoutPayload,
   type BulkUserEntry,
   type InviteUserPayload,
   type UserQuery,
@@ -170,6 +178,10 @@ export function useAdminCreateContribution() {
       durationMonths?: number
       endDate?: string
       withdrawalDate?: string
+      commissionEnabled?: boolean
+      commissionType?: string
+      commissionRate?: number
+      commissionFixed?: number
     }) => apiAdminCreateContribution(payload),
     onSuccess: () => {
       toast.success("Contribution plan created.")
@@ -309,7 +321,8 @@ export function useAdminDeleteTransaction() {
 export function useAdminWithdrawals(params?: {
   page?: number
   pageSize?: number
-  status?: "pending" | "approved" | "rejected" | "completed"
+  status?: "pending" | "approved" | "rejected" | "completed" | "processing" | "failed"
+  source?: "wallet" | "savings_plan" | "contribution" | "emergency" | "admin"
 }) {
   return useQuery({
     queryKey: queryKeys.adminWithdrawals.list(params ?? {}),
@@ -320,14 +333,106 @@ export function useAdminWithdrawals(params?: {
 export function useReviewWithdrawal() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ withdrawalId, status }: { withdrawalId: string; status: "approved" | "rejected" }) =>
-      apiReviewWithdrawal(withdrawalId, status),
-    onSuccess: () => {
-      toast.success("Withdrawal reviewed.")
+    mutationFn: ({
+      withdrawalId,
+      status,
+      reason,
+    }: {
+      withdrawalId: string
+      status: "approved" | "rejected"
+      reason?: string
+    }) => apiReviewWithdrawal(withdrawalId, status, reason),
+    onSuccess: (_data, variables) => {
+      toast.success(variables.status === "approved" ? "Withdrawal approved." : "Withdrawal rejected.")
       queryClient.invalidateQueries({ queryKey: queryKeys.adminWithdrawals.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats })
+      queryClient.invalidateQueries({ queryKey: queryKeys.savings.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all })
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  })
+}
+
+export function useAdminInitiatePayout() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: AdminPayoutPayload) => apiAdminPayout(payload),
+    onSuccess: () => {
+      toast.success("Admin payout processed.")
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminWithdrawals.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats })
+      queryClient.invalidateQueries({ queryKey: queryKeys.savings.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all })
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  })
+}
+
+export function useAdminPendingPayouts() {
+  return useQuery({
+    queryKey: ["admin-payouts", "pending"],
+    queryFn: apiAdminPendingPayouts,
+  })
+}
+
+export function useAdminApprovePayout() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ payoutId, reason }: { payoutId: string; reason?: string }) =>
+      apiApprovePayout(payoutId, reason),
+    onSuccess: () => {
+      toast.success("Payout approved and credited to the member's wallet.")
+      queryClient.invalidateQueries({ queryKey: ["admin-payouts"] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminContributions.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.contributions.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.adminStats })
     },
     onError: (error: Error) => toast.error(getErrorMessage(error)),
+  })
+}
+
+export function useAdminRejectPayout() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ payoutId, reason }: { payoutId: string; reason: string }) =>
+      apiRejectPayout(payoutId, reason),
+    onSuccess: () => {
+      toast.success("Payout rejected.")
+      queryClient.invalidateQueries({ queryKey: ["admin-payouts"] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminContributions.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.contributions.all })
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  })
+}
+
+export function useCommissionSettings() {
+  return useQuery({
+    queryKey: ["admin-commission-settings"],
+    queryFn: apiGetCommissionSettings,
+  })
+}
+
+export function useUpdateCommissionSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (
+      defaults: Record<string, { enabled: boolean; type: string; rate: number; fixed: number }>
+    ) => apiUpdateCommissionSettings(defaults),
+    onSuccess: () => {
+      toast.success("Commission settings updated.")
+      queryClient.invalidateQueries({ queryKey: ["admin-commission-settings"] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminStats })
+    },
+    onError: (error: Error) => toast.error(getErrorMessage(error)),
+  })
+}
+
+export function useCommissionSummary() {
+  return useQuery({
+    queryKey: ["admin-commission-summary"],
+    queryFn: apiGetCommissionSummary,
   })
 }
 

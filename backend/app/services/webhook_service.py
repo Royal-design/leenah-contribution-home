@@ -14,10 +14,16 @@ from app.models.enums import (
     PaymentProvider,
     PaymentPurpose,
     PaymentStatus,
+    PayoutStatus,
     TransactionStatus,
+    WithdrawalSource,
     WithdrawalStatus,
 )
 from app.repositories.audit_log_repository import audit_log_repository
+from app.repositories.contribution_repository import (
+    contribution_member_repository,
+    contribution_payout_repository,
+)
 from app.repositories.dedicated_account_repository import dedicated_account_repository
 from app.repositories.payment_repository import payment_repository
 from app.repositories.transaction_repository import transaction_repository
@@ -303,6 +309,9 @@ class WebhookService:
         status = event_type.rsplit(".", 1)[-1]
         amount_naira = _naira(data.get("amount"))
         txn_reference = f"WDL-{withdrawal.id.hex.upper()[:16]}"
+        reserved_txn = transaction_repository.get_by_reference(db, txn_reference)
+        gross = withdrawal.gross_amount if withdrawal.gross_amount is not None else withdrawal.amount
+        net = withdrawal.net_amount if withdrawal.net_amount is not None else withdrawal.amount
 
         # Reversals must be processed even after a successful transfer is
         # recorded (the money returns to the user). All other terminal states
@@ -311,24 +320,29 @@ class WebhookService:
             if withdrawal.status == WithdrawalStatus.REVERSED:
                 return "already_final"
             if withdrawal.status == WithdrawalStatus.COMPLETED:
-                wallet_service.revert_withdrawal(
-                    db,
-                    user_id=withdrawal.user_id,
-                    amount=withdrawal.amount,
-                    description="Reversed withdrawal credited back to wallet",
-                    reference=make_reference("REV"),
-                    details={"transfer_code": transfer_code, "withdrawal_id": str(withdrawal.id)},
-                )
+                if reserved_txn is not None:
+                    # Wallet-backed: money returns to the user's balance.
+                    wallet_service.revert_withdrawal(
+                        db,
+                        user_id=withdrawal.user_id,
+                        amount=net,
+                        description="Reversed withdrawal credited back to wallet",
+                        reference=make_reference("REV"),
+                        details={"transfer_code": transfer_code, "withdrawal_id": str(withdrawal.id)},
+                    )
+                else:
+                    # Pot-backed: replenish the plan/contribution pot.
+                    self._restore_pot(db, withdrawal)
             else:
-                txn = transaction_repository.get_by_reference(db, txn_reference)
-                wallet_service.release_reserved(
-                    db,
-                    user_id=withdrawal.user_id,
-                    amount=withdrawal.amount,
-                    txn_id=txn.id if txn else None,
-                    description="Transfer reversed before completion",
-                    details={"transfer_code": transfer_code, "withdrawal_id": str(withdrawal.id)},
-                )
+                if reserved_txn is not None:
+                    wallet_service.release_reserved(
+                        db,
+                        user_id=withdrawal.user_id,
+                        amount=gross,
+                        txn_id=reserved_txn.id,
+                        description="Transfer reversed before completion",
+                        details={"transfer_code": transfer_code, "withdrawal_id": str(withdrawal.id)},
+                    )
             withdrawal.status = WithdrawalStatus.REVERSED
             withdrawal.completed_at = _utcnow()
             self._audit(db, withdrawal, "Paystack transfer reversed", AuditAction.REVERT)
@@ -345,15 +359,18 @@ class WebhookService:
             return "already_final"
 
         if status == "success":
-            if withdrawal.withdrawal_type == "savings":
-                txn = transaction_repository.get_by_reference(db, txn_reference)
+            if reserved_txn is not None:
                 wallet_service.finalize_reserved(
                     db,
                     user_id=withdrawal.user_id,
-                    amount=withdrawal.amount,
-                    txn_id=txn.id if txn else None,
+                    amount=gross,
+                    txn_id=reserved_txn.id,
                     details={"transfer_code": transfer_code, "withdrawal_id": str(withdrawal.id)},
                 )
+            else:
+                # Pot-backed payout confirmed: consume the pot and record the ledger.
+                self._consume_pot(db, withdrawal)
+                self._record_transfer_transaction(db, withdrawal)
             withdrawal.status = WithdrawalStatus.COMPLETED
             withdrawal.completed_at = _utcnow()
             self._audit(db, withdrawal, "Paystack transfer completed", AuditAction.UPDATE)
@@ -361,20 +378,19 @@ class WebhookService:
                 db,
                 user_id=withdrawal.user_id,
                 title="Withdrawal completed",
-                message=f"Your withdrawal of {withdrawal.amount} has been paid out.",
+                message=f"Your withdrawal of {net} has been paid out.",
                 type_=NotificationType.WITHDRAWAL,
             )
             return "completed"
 
         if status == "failed":
             reason = data.get("failure_reason") or data.get("reason") or "Transfer failed"
-            if withdrawal.withdrawal_type == "savings":
-                txn = transaction_repository.get_by_reference(db, txn_reference)
+            if reserved_txn is not None:
                 wallet_service.release_reserved(
                     db,
                     user_id=withdrawal.user_id,
-                    amount=withdrawal.amount,
-                    txn_id=txn.id if txn else None,
+                    amount=gross,
+                    txn_id=reserved_txn.id,
                     description="Withdrawal failed; funds released",
                     details={"transfer_code": transfer_code, "failure": reason, "withdrawal_id": str(withdrawal.id)},
                 )
@@ -386,12 +402,76 @@ class WebhookService:
                 db,
                 user_id=withdrawal.user_id,
                 title="Withdrawal failed",
-                message=f"Your withdrawal of {withdrawal.amount} failed. Funds have been returned to your wallet.",
+                message=f"Your withdrawal of {net} failed. Funds have been returned to your wallet.",
                 type_=NotificationType.WITHDRAWAL,
             )
             return "failed"
 
         return "unknown_status"
+
+    def _consume_pot(self, db: Session, withdrawal) -> None:
+        """Deduct a completed pot-based payout from the contribution rotation."""
+        if withdrawal.related_contribution_id is None:
+            return
+        gross = withdrawal.gross_amount if withdrawal.gross_amount is not None else withdrawal.amount
+        member = contribution_member_repository.get(db, withdrawal.related_contribution_id, withdrawal.user_id)
+        if member is None:
+            return
+        for payout in contribution_payout_repository.list_for_member(db, withdrawal.related_contribution_id, member.id):
+            if payout.status == PayoutStatus.PENDING:
+                payout.amount = max(payout.amount - gross, 0)
+                if payout.amount <= 0:
+                    payout.status = PayoutStatus.SKIPPED
+                payout.admin_note = f"Paid out via withdrawal {withdrawal.id}"
+                db.flush()
+                return
+
+    def _restore_pot(self, db: Session, withdrawal) -> None:
+        if withdrawal.related_contribution_id is None:
+            return
+        gross = withdrawal.gross_amount if withdrawal.gross_amount is not None else withdrawal.amount
+        member = contribution_member_repository.get(db, withdrawal.related_contribution_id, withdrawal.user_id)
+        if member is None:
+            return
+        for payout in contribution_payout_repository.list_for_member(db, withdrawal.related_contribution_id, member.id):
+            if payout.status in (PayoutStatus.PENDING, PayoutStatus.SKIPPED):
+                payout.amount = payout.amount + gross
+                payout.status = PayoutStatus.PENDING
+                payout.admin_note = None
+                db.flush()
+                return
+
+    def _record_transfer_transaction(self, db: Session, withdrawal) -> None:
+        from datetime import datetime as _dt
+
+        reference = f"WDLT-{withdrawal.id.hex.upper()[:16]}"
+        if transaction_repository.get_by_reference(db, reference) is not None:
+            return
+        net = withdrawal.net_amount if withdrawal.net_amount is not None else withdrawal.amount
+        transaction_repository.create(
+            db,
+            user_id=withdrawal.user_id,
+            type_=TransactionType.WITHDRAWAL,
+            status=TransactionStatus.SUCCESSFUL,
+            amount=net,
+            description=f"{withdrawal.withdrawal_type.title()} withdrawal to {withdrawal.destination}",
+            reference=reference,
+            details={"withdrawal_id": str(withdrawal.id), "source": withdrawal.source.value, "channel": "bank"},
+            gross_amount=withdrawal.gross_amount if withdrawal.gross_amount is not None else withdrawal.amount,
+            commission_rate=withdrawal.commission_rate,
+            commission_type=withdrawal.commission_type,
+            commission_amount=withdrawal.commission_amount,
+            fee_amount=withdrawal.fee_amount,
+            net_amount=net,
+            source=withdrawal.source.value,
+            related_savings_plan_id=withdrawal.related_savings_plan_id,
+            related_contribution_id=withdrawal.related_contribution_id,
+            related_withdrawal_id=withdrawal.id,
+            related_emergency_request_id=withdrawal.id if withdrawal.source == WithdrawalSource.EMERGENCY else None,
+            completed_at=_dt.now(timezone.utc),
+            approved_by=withdrawal.admin_id,
+            approved_at=withdrawal.approved_at,
+        )
 
     def _audit(self, db: Session, withdrawal, description: str, action: AuditAction) -> None:
         audit_log_repository.create(

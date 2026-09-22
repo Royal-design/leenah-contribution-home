@@ -32,6 +32,25 @@ class TransactionService:
             "pages": (total + page_size - 1) // page_size if total else 0,
         }
 
+    def list_commissions(self, db: Session, *, type_: TransactionType | None = None, page: int = 1, page_size: int = 20):
+        items, total = transaction_repository.list_commissioned(db, type_=type_, page=page, page_size=page_size)
+        return {
+            "items": [TransactionOut.model_validate(item) for item in items],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": (total + page_size - 1) // page_size if total else 0,
+        }
+
+    def commission_summary(self, db: Session):
+        data = transaction_repository.commission_summary(db)
+        by_type, by_source = data["by_type"], data["by_source"]
+        return {
+            "by_type": by_type,
+            "by_source": by_source,
+            "total": sum(t["total"] for t in by_type),
+        }
+
     def get(self, db: Session, *, user: User, transaction_id: uuid.UUID) -> Transaction:
         transaction = transaction_repository.get(db, transaction_id)
         if transaction is None:

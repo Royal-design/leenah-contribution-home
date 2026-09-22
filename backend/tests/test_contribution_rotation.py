@@ -238,7 +238,7 @@ class TestRotationPositions:
 
 
 class TestAutoPayout:
-    def test_round_completion_pays_position_holder(self, admin_token, users):
+    def test_round_completion_marks_payout_eligible_and_admin_approves(self, admin_token, users):
         user_ids = [_user_id(token) for token in users]
         plan = _create_plan(admin_token, member_count=2, rounds=2)
 
@@ -257,15 +257,45 @@ class TestAutoPayout:
             )
             assert pay.status_code == 200, pay.text
 
-        # Position 1's holder should now be PAID and credited for the round pool.
+        # Round 1 is complete: position 1's payout is now ELIGIBLE but still
+        # pending — money is NOT auto-credited (admin approval is required).
+        detail = _detail(users[0], plan["id"])
+        u1_payout = next(p for p in detail["payouts"] if p["round_number"] == 1)
+        assert u1_payout["status"] == "pending"
+        assert u1_payout["eligible_at"] is not None
+
+        # The wallet was NOT credited yet.
+        bal_before = client.get("/api/savings/account", headers=_headers(users[0])).json()["data"]["balance"]
+
+        pending = client.get("/api/admin/payouts", headers=_headers(admin_token))
+        assert pending.status_code == 200, pending.text
+        assert any(p["id"] == u1_payout["id"] for p in pending.json()["data"]["items"])
+
+        # Admin approves the payout.
+        approve = client.post(
+            f"/api/admin/payouts/{u1_payout['id']}/approve",
+            headers=_headers(admin_token),
+            json={"reason": "Round 1 complete"},
+        )
+        assert approve.status_code == 200, approve.text
+
         detail = _detail(users[0], plan["id"])
         u1_payout = next(p for p in detail["payouts"] if p["round_number"] == 1)
         assert u1_payout["status"] == "paid"
         assert u1_payout["paid_at"] is not None
+        assert u1_payout["transaction_id"] is not None
+
+        # Double approval is rejected.
+        again = client.post(
+            f"/api/admin/payouts/{u1_payout['id']}/approve",
+            headers=_headers(admin_token),
+            json={},
+        )
+        assert again.status_code == 400
 
         u2_payout = next(p for p in _detail(users[1], plan["id"])["payouts"] if p["round_number"] == 2)
         assert u2_payout["status"] == "pending"
 
         # The wallet was credited with the round-1 pool (2 members × amount).
         bal = client.get("/api/savings/account", headers=_headers(users[0])).json()["data"]["balance"]
-        assert bal >= 20000
+        assert bal >= bal_before + 20000

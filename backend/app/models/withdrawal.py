@@ -1,20 +1,46 @@
 from datetime import datetime, timezone
 import uuid
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    DateTime,
+    Enum as SAEnum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.enums import WithdrawalStatus
+from app.models.enums import WithdrawalChannel, WithdrawalSource, WithdrawalStatus
 
 if TYPE_CHECKING:
+    from app.models.contribution import Contribution
+    from app.models.savings_plan import SavingsPlan
     from app.models.user import User
     from app.models.user_bank_account import UserBankAccount
 
 
 class Withdrawal(Base):
+    """A financial payout request tracked through the admin approval lifecycle.
+
+    `source` describes where the money comes from:
+
+    * wallet       — the user's available wallet balance (reserved at request)
+    * savings_plan — money accumulated in a completed Savings Plan pot
+    * contribution — money from a contribution plan pot
+    * emergency    — an exceptional early request that requires admin approval
+    * admin        — an admin-initiated payout on behalf of a user
+
+    `channel` is where the money goes: "wallet" (platform wallet) or "bank".
+    Gross / commission / net are frozen at request time so the approval dialog
+    shows exactly what will be paid out.
+    """
+
     __tablename__ = "withdrawals"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -28,12 +54,41 @@ class Withdrawal(Base):
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     withdrawal_type: Mapped[str] = mapped_column(String, nullable=False)  # "savings" | "contribution"
 
-    bank_name: Mapped[str] = mapped_column(String, nullable=False)
-    account_number: Mapped[str] = mapped_column(String, nullable=False)
+    channel: Mapped[WithdrawalChannel] = mapped_column(
+        SAEnum(WithdrawalChannel), nullable=False, default=WithdrawalChannel.BANK
+    )
+    source: Mapped[WithdrawalSource] = mapped_column(
+        SAEnum(WithdrawalSource), nullable=False, default=WithdrawalSource.WALLET
+    )
+    reason: Mapped[str | None] = mapped_column(Text)  # user (emergency) / admin payout reason
+    admin_note: Mapped[str | None] = mapped_column(Text)
+
+    bank_name: Mapped[str | None] = mapped_column(String)
+    account_number: Mapped[str | None] = mapped_column(String)
     account_name: Mapped[str | None] = mapped_column(String)
     destination: Mapped[str] = mapped_column(String, nullable=False)
 
     contribution_name: Mapped[str | None] = mapped_column(String)
+
+    # --- related plans ---
+    related_savings_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("savings_plans.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    related_contribution_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("contributions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # --- commission (frozen at request time) ---
+    gross_amount: Mapped[int | None] = mapped_column(Integer)
+    commission_rate: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    commission_type: Mapped[str | None] = mapped_column(String)
+    commission_amount: Mapped[int | None] = mapped_column(Integer)
+    fee_amount: Mapped[int | None] = mapped_column(Integer)
+    net_amount: Mapped[int | None] = mapped_column(Integer)
 
     status: Mapped[WithdrawalStatus] = mapped_column(SAEnum(WithdrawalStatus), nullable=False, default=WithdrawalStatus.PENDING)
 
@@ -59,3 +114,5 @@ class Withdrawal(Base):
 
     user: Mapped["User"] = relationship(back_populates="withdrawals")
     bank_account: Mapped["UserBankAccount | None"] = relationship()
+    related_savings_plan: Mapped["SavingsPlan | None"] = relationship()
+    related_contribution: Mapped["Contribution | None"] = relationship()

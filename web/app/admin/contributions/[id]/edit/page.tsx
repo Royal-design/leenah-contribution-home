@@ -12,12 +12,7 @@ import { toast } from "sonner"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Field,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Textarea } from "@/components/ui/textarea"
@@ -25,9 +20,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { CommissionConfigFields, type CommissionConfigValue } from "@/components/admin/commission-config-fields"
 import { useAdminContribution, useAdminUpdateContribution } from "@/hooks/queries/use-admin"
 import { isPastDate } from "@/lib/dates"
-import type { ContributionStatus, Frequency } from "@/types"
+import type { Contribution, ContributionStatus, Frequency } from "@/types"
 
 const frequencies: Array<{ value: Frequency; label: string }> = [
   { value: "weekly", label: "Weekly" },
@@ -88,34 +84,14 @@ function toDateInput(iso: string | Date): string {
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10)
 }
 
-export default function EditContributionPage() {
+function EditContributionForm({ id, contribution }: { id: string; contribution: Contribution }) {
   const router = useRouter()
-  const params = useParams<{ id: string }>()
-  const id = params.id
-  const { data: contribution, isPending } = useAdminContribution(id)
   const updateContribution = useAdminUpdateContribution()
+  const originalStartDate = toDateInput(contribution.startDate)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema) as Resolver<FormValues>,
     defaultValues: {
-      name: "",
-      description: "",
-      organization: "",
-      amount: 0,
-      frequency: "monthly",
-      memberCount: 1,
-      rounds: 12,
-      startDate: "",
-      endDate: "",
-      withdrawalDate: "",
-      status: "upcoming",
-      isOpen: true,
-    },
-  })
-
-  React.useEffect(() => {
-    if (!contribution) return
-    form.reset({
       name: contribution.name,
       description: contribution.description,
       organization: contribution.organization ?? "",
@@ -130,31 +106,15 @@ export default function EditContributionPage() {
         : "",
       status: contribution.status,
       isOpen: contribution.isOpen,
-    })
-  }, [contribution, form])
+    },
+  })
 
-  if (isPending) {
-    return (
-      <div className="flex flex-col gap-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-96 w-full rounded-xl" />
-      </div>
-    )
-  }
-
-  if (!contribution) {
-    return (
-      <div className="flex flex-col items-center gap-3 rounded-xl border bg-card py-16 text-center">
-        <p className="text-sm font-medium">Contribution not found.</p>
-        <Button variant="outline" size="sm" render={<Link href="/admin/contributions" />}>
-          Back to contributions
-        </Button>
-      </div>
-    )
-  }
-
-  const originalStartDate = toDateInput(contribution.startDate)
+  const [commission, setCommission] = React.useState<CommissionConfigValue>({
+    enabled: contribution.commissionEnabled ?? false,
+    type: contribution.commissionType ?? "percentage",
+    rate: contribution.commissionRate ?? 0,
+    fixed: contribution.commissionFixed ?? 0,
+  })
 
   function onSubmit(values: FormValues) {
     if (
@@ -181,6 +141,10 @@ export default function EditContributionPage() {
           withdrawalDate: values.withdrawalDate || undefined,
           status: values.status,
           isOpen: values.isOpen,
+          commissionEnabled: commission.enabled,
+          commissionType: commission.enabled ? commission.type : undefined,
+          commissionRate: commission.enabled ? commission.rate : undefined,
+          commissionFixed: commission.enabled ? commission.fixed : undefined,
         },
       },
       { onSuccess: () => router.push("/admin/contributions") }
@@ -452,6 +416,8 @@ export default function EditContributionPage() {
           </CardContent>
         </Card>
 
+        <CommissionConfigFields value={commission} onChange={setCommission} />
+
         <div className="flex gap-2">
           <Button
             type="submit"
@@ -473,4 +439,33 @@ export default function EditContributionPage() {
       </form>
     </div>
   )
+}
+
+export default function EditContributionPage() {
+  const params = useParams<{ id: string }>()
+  const id = params.id
+  const { data: contribution, isPending } = useAdminContribution(id)
+
+  if (isPending) {
+    return (
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-96 w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  if (!contribution) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-xl border bg-card py-16 text-center">
+        <p className="text-sm font-medium">Contribution not found.</p>
+        <Button variant="outline" size="sm" render={<Link href="/admin/contributions" />}>
+          Back to contributions
+        </Button>
+      </div>
+    )
+  }
+
+  return <EditContributionForm key={contribution.id} id={id} contribution={contribution} />
 }

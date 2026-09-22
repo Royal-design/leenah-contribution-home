@@ -5,13 +5,23 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppException
 from app.models.contribution import Contribution
-from app.models.enums import AuditAction, AuditCategory, TransactionStatus
+from app.models.enums import (
+    AuditAction,
+    AuditCategory,
+    TransactionStatus,
+    TransactionType,
+    WithdrawalStatus,
+    WithdrawalSource,
+)
 from app.models.savings_account import SavingsAccount
 from app.models.savings_plan import SavingsPlan
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.repositories.audit_log_repository import audit_log_repository
-from app.repositories.contribution_repository import contribution_repository
+from app.repositories.contribution_repository import (
+    contribution_payout_repository,
+    contribution_repository,
+)
 from app.repositories.savings_plan_repository import (
     savings_plan_repository,
 )
@@ -57,6 +67,13 @@ class AnalyticsService:
             active_plans=active_contributions + active_savings_plans,
             total_in_contribution_plans=contributed_total,
             total_in_savings_plans=saved_total,
+            pending_emergency_requests=withdrawal_repository.count_by(
+                db, status=WithdrawalStatus.PENDING, source=WithdrawalSource.EMERGENCY.value
+            ),
+            pending_payouts=len(contribution_payout_repository.list_eligible_pending(db)),
+            total_commissions=transaction_repository.sum_commission(db),
+            completed_withdrawals=withdrawal_repository.count_by(db, status=WithdrawalStatus.COMPLETED),
+            failed_transactions=transaction_repository.count_by_status(db, TransactionStatus.FAILED),
         )
 
     def recent_transactions(self, db: Session, limit: int = 10) -> list[TransactionOut]:

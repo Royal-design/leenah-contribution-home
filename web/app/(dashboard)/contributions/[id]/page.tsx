@@ -8,6 +8,8 @@ import { ChevronLeft, Wallet, CircleCheck, Circle, LogOut, UserPlus } from "luci
 import { StatusBadge } from "@/components/shared/status-badge"
 import { ContributionProgress } from "@/components/contributions/contribution-progress"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { CommissionBreakdown } from "@/components/shared/commission-breakdown"
+import { EmergencyWithdrawalDialog } from "@/components/forms/emergency-withdrawal-dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,6 +32,7 @@ export default function ContributionDetailPage() {
   const currentUserId = useAuthStore((state) => state.user?.id)
   const [fundOpen, setFundOpen] = React.useState(false)
   const [leaveOpen, setLeaveOpen] = React.useState(false)
+  const [emergencyOpen, setEmergencyOpen] = React.useState(false)
 
   if (isPending) {
     return (
@@ -70,6 +73,7 @@ export default function ContributionDetailPage() {
   )
   const paidCount = contribution.schedule.filter((entry) => entry.status === "paid").length
   const withdrawPaid = myPayout?.status === "paid"
+  const payoutEligible = myPayout?.status === "pending" && Boolean(myPayout.eligibleAt)
   const myWithdrawalDate = myPayout?.scheduledDate
   const withdrawSoon = myWithdrawalDate ? isUpcomingSoon(myWithdrawalDate) : false
 
@@ -113,6 +117,11 @@ export default function ContributionDetailPage() {
             <Button onClick={() => setFundOpen(true)}>
               <Wallet />
               Pay contribution
+            </Button>
+          )}
+          {currentMember && (currentMember.totalContributed ?? 0) > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setEmergencyOpen(true)}>
+              Request emergency withdrawal
             </Button>
           )}
           {currentMember && contribution.status !== "completed" && (
@@ -182,7 +191,9 @@ export default function ContributionDetailPage() {
                 ? "Join this plan to see your withdrawal position and date."
                 : withdrawPaid
                   ? "Your payout has been paid into your wallet."
-                  : `Due ${myWithdrawalDate ? formatLongDate(myWithdrawalDate) : "—"} — position ${currentMember.position} in the rotation`}
+                  : payoutEligible
+                    ? "Your round is complete and your payout is awaiting admin approval."
+                    : `Due ${myWithdrawalDate ? formatLongDate(myWithdrawalDate) : "—"} — position ${currentMember.position} in the rotation`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -193,23 +204,42 @@ export default function ContributionDetailPage() {
                   ? "bg-muted/40"
                   : withdrawPaid
                     ? "border-success/30 bg-success/10"
-                    : withdrawSoon
-                      ? "border-warning/30 bg-warning/10"
-                      : "bg-muted/40"
+                    : payoutEligible
+                      ? "border-info/30 bg-info/10"
+                      : withdrawSoon
+                        ? "border-warning/30 bg-warning/10"
+                        : "bg-muted/40"
               )}
             >
-              <p className={cn("text-sm font-medium", withdrawPaid && "text-success")}>
+              <p className={cn("text-sm font-medium", withdrawPaid ? "text-success" : payoutEligible && "text-info")}>
                 {!currentMember
                   ? "You haven't joined this contribution yet."
                   : withdrawPaid
                     ? "Eligible — your payout is available in your wallet."
-                    : `Your withdrawal opens on ${
-                        myWithdrawalDate ? formatLongDate(myWithdrawalDate) : "—"
-                      }`}
+                    : payoutEligible
+                      ? "Payout available — awaiting admin approval."
+                      : `Your withdrawal opens on ${
+                          myWithdrawalDate ? formatLongDate(myWithdrawalDate) : "—"
+                        }`}
               </p>
+              {payoutEligible && myPayout && (
+                <div className="mt-3">
+                  <CommissionBreakdown
+                    gross={myPayout.grossAmount ?? myPayout.amount}
+                    commission={myPayout.commissionAmount}
+                    fee={undefined}
+                    net={myPayout.netAmount}
+                    netLabel="Net payout"
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Contribution payouts require admin approval before they&apos;re credited
+                    to your wallet.
+                  </p>
+                </div>
+              )}
               <p className="mt-1 text-sm text-muted-foreground">
                 {contribution.withdrawalRule.note ??
-                  "Withdrawal dates follow your rotation position. Payouts are sent to your registered bank account."}
+                  "Withdrawal dates follow your rotation position. Payouts are credited to your wallet."}
               </p>
             </div>
           </CardContent>
@@ -385,6 +415,13 @@ export default function ContributionDetailPage() {
             onSuccess: () => router.push("/contributions"),
           })
         }}
+      />
+
+      <EmergencyWithdrawalDialog
+        open={emergencyOpen}
+        onOpenChange={setEmergencyOpen}
+        available={contribution.totalExpected}
+        contributionId={contribution.id}
       />
     </div>
   )

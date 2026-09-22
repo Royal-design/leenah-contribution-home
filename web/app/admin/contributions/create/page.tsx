@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { StatusBadge } from "@/components/shared/status-badge"
+import { CommissionConfigFields, type CommissionConfigValue } from "@/components/admin/commission-config-fields"
 import { useAdminCreateContribution } from "@/hooks/queries/use-admin"
 import { DURATION_PRESETS, isPastDate, endDateFromDuration } from "@/lib/dates"
 import { formatDate, formatNaira } from "@/lib/format"
@@ -141,6 +142,12 @@ export default function CreateContributionPage() {
   const previewEndDate = watched.startDate && durationMonths > 0
     ? endDateFromDuration(watched.startDate, durationMonths)
     : ""
+  const [commission, setCommission] = React.useState<CommissionConfigValue>({
+    enabled: false,
+    type: "percentage",
+    rate: 0,
+    fixed: 0,
+  })
 
   function onSubmit(values: FormValues) {
     createContribution.mutate(
@@ -154,6 +161,10 @@ export default function CreateContributionPage() {
         startDate: values.startDate,
         durationMonths: resolveDurationMonths(values),
         withdrawalDate: values.withdrawalDate || undefined,
+        commissionEnabled: commission.enabled,
+        commissionType: commission.enabled ? commission.type : undefined,
+        commissionRate: commission.enabled ? commission.rate : undefined,
+        commissionFixed: commission.enabled ? commission.fixed : undefined,
       },
       {
         onSuccess: () => router.push("/admin/contributions"),
@@ -495,6 +506,8 @@ export default function CreateContributionPage() {
               </FieldGroup>
             </CardContent>
           </Card>
+
+          <CommissionConfigFields value={commission} onChange={setCommission} />
 
           <Button
             type="submit"

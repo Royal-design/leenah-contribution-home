@@ -162,6 +162,10 @@ export async function apiAdminCreateContribution(payload: {
   durationMonths?: number
   endDate?: string
   withdrawalDate?: string
+  commissionEnabled?: boolean
+  commissionType?: string
+  commissionRate?: number
+  commissionFixed?: number
 }): Promise<Contribution> {
   const { data } = await api.post<RawContribution>("/api/admin/contributions", {
     name: payload.name,
@@ -175,6 +179,10 @@ export async function apiAdminCreateContribution(payload: {
     end_date: payload.durationMonths ? undefined : payload.endDate,
     withdrawal_rule: payload.withdrawalDate ? "fixed_date" : undefined,
     fixed_withdrawal_date: payload.withdrawalDate,
+    commission_enabled: payload.commissionEnabled,
+    commission_type: payload.commissionType,
+    commission_rate: payload.commissionRate,
+    commission_fixed: payload.commissionFixed,
   })
   return mapContribution(data)
 }
@@ -215,6 +223,10 @@ export async function apiAdminUpdateContribution(
     withdrawal_date: payload.withdrawalDate,
     status: payload.status,
     is_open: payload.isOpen,
+    commission_enabled: payload.commissionEnabled,
+    commission_type: payload.commissionType,
+    commission_rate: payload.commissionRate,
+    commission_fixed: payload.commissionFixed,
   })
   return mapContribution(data)
 }
@@ -286,24 +298,130 @@ export async function apiAdminDeleteTransaction(transactionId: string): Promise<
 export async function apiAdminListWithdrawals(params?: {
   page?: number
   pageSize?: number
-  status?: "pending" | "approved" | "rejected" | "completed"
+  status?: "pending" | "approved" | "rejected" | "completed" | "processing" | "failed"
+  source?: "wallet" | "savings_plan" | "contribution" | "emergency" | "admin"
 }): Promise<Paginated<Withdrawal>> {
   const pageSize = params?.pageSize ?? 20
   const { data } = await api.get<ListPayload<RawWithdrawal>>("/api/admin/withdrawals", {
     page: params?.page,
     page_size: pageSize,
     status: params?.status,
+    source: params?.source,
   })
   return toPaginated(data.items.map(mapWithdrawal), data, pageSize)
 }
 
+export interface AdminPayoutPayload {
+  userId: string
+  amount: number
+  channel: "wallet" | "bank"
+  reason?: string
+  adminNote?: string
+  bankAccountId?: string
+  savingsPlanId?: string
+  contributionId?: string
+}
+
+export async function apiAdminPayout(payload: AdminPayoutPayload): Promise<Withdrawal> {
+  const { data } = await api.post<RawWithdrawal>("/api/admin/withdrawals", {
+    user_id: payload.userId,
+    amount: payload.amount,
+    channel: payload.channel,
+    reason: payload.reason,
+    admin_note: payload.adminNote,
+    bank_account_id: payload.bankAccountId,
+    savings_plan_id: payload.savingsPlanId,
+    contribution_id: payload.contributionId,
+  })
+  return mapWithdrawal(data)
+}
+
+export interface PendingPayoutItem {
+  id: string
+  contributionId: string
+  memberId: string
+  roundNumber: number
+  scheduledDate: string
+  amount: number
+  status: "pending" | "paid" | "skipped"
+  paidAt: string | null
+  transactionId: string | null
+  eligibleAt?: string | null
+  adminNote?: string | null
+  grossAmount?: number | null
+  commissionRate?: number | null
+  commissionType?: string | null
+  commissionAmount?: number | null
+  netAmount?: number | null
+  userId?: string
+  userName?: string
+  userEmail?: string | null
+  contributionName?: string | null
+}
+
+export async function apiAdminPendingPayouts(): Promise<PendingPayoutItem[]> {
+  const { data } = await api.get<{ items: PendingPayoutItem[]; total: number }>(
+    "/api/admin/payouts"
+  )
+  return data.items
+}
+
+export async function apiApprovePayout(payoutId: string, reason?: string): Promise<{ payoutId: string; status: string }> {
+  const { data } = await api.post<{ payout_id: string; status: string }>(
+    `/api/admin/payouts/${payoutId}/approve`,
+    { reason }
+  )
+  return { payoutId: data.payout_id, status: data.status }
+}
+
+export async function apiRejectPayout(payoutId: string, reason: string): Promise<{ payoutId: string; status: string }> {
+  const { data } = await api.post<{ payout_id: string; status: string }>(
+    `/api/admin/payouts/${payoutId}/reject`,
+    { reason }
+  )
+  return { payoutId: data.payout_id, status: data.status }
+}
+
+export async function apiGetCommissionSettings(): Promise<{
+  defaults: Record<string, { enabled: boolean; type: string; rate: number; fixed: number }>
+  keys: string[]
+}> {
+  const { data } = await api.get<{
+    defaults: Record<string, { enabled: boolean; type: string; rate: number; fixed: number }>
+    keys: string[]
+  }>("/api/admin/settings/commissions")
+  return data
+}
+
+export async function apiUpdateCommissionSettings(
+  defaults: Record<string, { enabled: boolean; type: string; rate: number; fixed: number }>
+): Promise<{ defaults: Record<string, { enabled: boolean; type: string; rate: number; fixed: number }>; keys: string[] }> {
+  const { data } = await api.put<{
+    defaults: Record<string, { enabled: boolean; type: string; rate: number; fixed: number }>
+    keys: string[]
+  }>("/api/admin/settings/commissions", { defaults })
+  return data
+}
+
+export interface CommissionSummary {
+  byType: Array<{ type: string; total: number }>
+  bySource: Array<{ source: string | null; total: number }>
+  total: number
+}
+
+export async function apiGetCommissionSummary(): Promise<CommissionSummary> {
+  const { data } = await api.get<CommissionSummary>("/api/admin/commissions/summary")
+  return data
+}
+
 export async function apiReviewWithdrawal(
   withdrawalId: string,
-  status: "approved" | "rejected"
+  status: "approved" | "rejected",
+  reason?: string
 ): Promise<Withdrawal> {
   const { data } = await api.patch<RawWithdrawal>(
     `/api/admin/withdrawals/${withdrawalId}/review`,
-    { status }
+    { status, reason }
   )
   return mapWithdrawal(data)
 }

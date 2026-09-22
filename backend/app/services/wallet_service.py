@@ -15,6 +15,40 @@ def make_reference(prefix: str) -> str:
     return f"{prefix}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8].upper()}"
 
 
+def _financial_extra(
+    *,
+    gross_amount: int | None,
+    commission_rate=None,
+    commission_type: str | None,
+    commission_amount: int | None,
+    fee_amount: int | None,
+    net_amount: int | None,
+    source: str | None,
+    related_savings_plan_id: uuid.UUID | None,
+    related_contribution_id: uuid.UUID | None,
+    related_withdrawal_id: uuid.UUID | None,
+    related_emergency_request_id: uuid.UUID | None,
+) -> dict:
+    """Collect the reconciliation fields for a ledger row.
+
+    `amount` on the Transaction is the net wallet movement (gross for debits,
+    net for credits); the breakdown columns make every entry reconcilable.
+    """
+    return {
+        "gross_amount": gross_amount,
+        "commission_rate": commission_rate,
+        "commission_type": commission_type,
+        "commission_amount": commission_amount,
+        "fee_amount": fee_amount,
+        "net_amount": net_amount,
+        "source": source,
+        "related_savings_plan_id": related_savings_plan_id,
+        "related_contribution_id": related_contribution_id,
+        "related_withdrawal_id": related_withdrawal_id,
+        "related_emergency_request_id": related_emergency_request_id,
+    }
+
+
 class WalletService:
     """Internal wallet ledger.
 
@@ -55,7 +89,24 @@ class WalletService:
         details: dict | None = None,
         type_: TransactionType = TransactionType.FUNDING,
         status: TransactionStatus = TransactionStatus.SUCCESSFUL,
+        gross_amount: int | None = None,
+        commission_rate=None,
+        commission_type: str | None = None,
+        commission_amount: int | None = None,
+        fee_amount: int | None = None,
+        net_amount: int | None = None,
+        source: str | None = None,
+        related_savings_plan_id: uuid.UUID | None = None,
+        related_contribution_id: uuid.UUID | None = None,
+        related_withdrawal_id: uuid.UUID | None = None,
+        related_emergency_request_id: uuid.UUID | None = None,
     ) -> Transaction:
+        if amount <= 0:
+            raise AppException(
+                message="Amount must be greater than zero.",
+                status_code=400,
+                error_code="INVALID_AMOUNT",
+            )
         account = self._get_account(db, user_id)
         savings_account_repository.credit(db, account, amount)
 
@@ -68,6 +119,19 @@ class WalletService:
             description=description,
             reference=reference or make_reference("TXN"),
             details=details or {"method": "wallet"},
+            **_financial_extra(
+                gross_amount=gross_amount,
+                commission_rate=commission_rate,
+                commission_type=commission_type,
+                commission_amount=commission_amount,
+                fee_amount=fee_amount,
+                net_amount=net_amount,
+                source=source,
+                related_savings_plan_id=related_savings_plan_id,
+                related_contribution_id=related_contribution_id,
+                related_withdrawal_id=related_withdrawal_id,
+                related_emergency_request_id=related_emergency_request_id,
+            ),
         )
 
     def debit(
@@ -81,7 +145,23 @@ class WalletService:
         type_: TransactionType = TransactionType.WITHDRAWAL,
         details: dict | None = None,
         track_withdrawal: bool = False,
+        commission_rate=None,
+        commission_type: str | None = None,
+        commission_amount: int | None = None,
+        fee_amount: int | None = None,
+        net_amount: int | None = None,
+        source: str | None = None,
+        related_savings_plan_id: uuid.UUID | None = None,
+        related_contribution_id: uuid.UUID | None = None,
+        related_withdrawal_id: uuid.UUID | None = None,
+        related_emergency_request_id: uuid.UUID | None = None,
     ) -> Transaction:
+        if amount <= 0:
+            raise AppException(
+                message="Amount must be greater than zero.",
+                status_code=400,
+                error_code="INVALID_AMOUNT",
+            )
         account = self._get_account(db, user_id)
         if account.balance < amount:
             raise AppException(
@@ -101,6 +181,17 @@ class WalletService:
             description=description,
             reference=reference or make_reference("TXN"),
             details=details or {},
+            gross_amount=amount,
+            commission_rate=commission_rate,
+            commission_type=commission_type,
+            commission_amount=commission_amount,
+            fee_amount=fee_amount,
+            net_amount=net_amount,
+            source=source,
+            related_savings_plan_id=related_savings_plan_id,
+            related_contribution_id=related_contribution_id,
+            related_withdrawal_id=related_withdrawal_id,
+            related_emergency_request_id=related_emergency_request_id,
         )
 
     # ------------------------------------------------------------ reservation
@@ -114,6 +205,15 @@ class WalletService:
         description: str,
         reference: str | None = None,
         details: dict | None = None,
+        commission_rate=None,
+        commission_type: str | None = None,
+        commission_amount: int | None = None,
+        fee_amount: int | None = None,
+        net_amount: int | None = None,
+        source: str | None = None,
+        related_savings_plan_id: uuid.UUID | None = None,
+        related_contribution_id: uuid.UUID | None = None,
+        related_emergency_request_id: uuid.UUID | None = None,
     ) -> Transaction:
         """Lock `amount` for a pending withdrawal.
 
@@ -121,6 +221,12 @@ class WalletService:
         PENDING WITHDRAWAL transaction tracks the reserved funds until it is
         finalised (SUCCESSFUL), released (FAILED) or reverted (REVERTED).
         """
+        if amount <= 0:
+            raise AppException(
+                message="Amount must be greater than zero.",
+                status_code=400,
+                error_code="INVALID_AMOUNT",
+            )
         account = self._get_account(db, user_id)
         if account.balance < amount:
             raise AppException(
@@ -140,6 +246,16 @@ class WalletService:
             description=description,
             reference=reference or make_reference("WDL"),
             details=details or {},
+            gross_amount=amount,
+            commission_rate=commission_rate,
+            commission_type=commission_type,
+            commission_amount=commission_amount,
+            fee_amount=fee_amount,
+            net_amount=net_amount,
+            source=source,
+            related_savings_plan_id=related_savings_plan_id,
+            related_contribution_id=related_contribution_id,
+            related_emergency_request_id=related_emergency_request_id,
         )
 
     def release_reserved(
@@ -211,6 +327,9 @@ class WalletService:
             description=description,
             reference=reference or make_reference("WDL"),
             details=details or {},
+            gross_amount=amount,
+            net_amount=amount,
+            source="reversal",
         )
 
 

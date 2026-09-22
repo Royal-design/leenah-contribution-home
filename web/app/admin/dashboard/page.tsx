@@ -130,7 +130,53 @@ export default function AdminDashboardPage() {
         />
       </section>
 
-      <section aria-label="Operations" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section aria-label="Requires attention">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Requires attention</CardTitle>
+            <CardDescription>Actions that need your review.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {data.pendingWithdrawals + data.pendingEmergencyRequests + data.pendingPayouts === 0 ? (
+              <p className="py-2 text-sm text-muted-foreground">
+                All caught up — nothing waiting for review.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {data.pendingWithdrawals > 0 && (
+                  <Link
+                    href="/admin/withdrawals?status=pending"
+                    className="inline-flex items-center gap-2 rounded-lg border bg-warning/10 px-3 py-2 text-sm font-medium text-warning transition-colors hover:bg-warning/20"
+                  >
+                    {data.pendingWithdrawals} pending withdrawal
+                    {data.pendingWithdrawals === 1 ? "" : "s"}
+                  </Link>
+                )}
+                {data.pendingEmergencyRequests > 0 && (
+                  <Link
+                    href="/admin/withdrawals?source=emergency&status=pending"
+                    className="inline-flex items-center gap-2 rounded-lg border bg-warning/10 px-3 py-2 text-sm font-medium text-warning transition-colors hover:bg-warning/20"
+                  >
+                    {data.pendingEmergencyRequests} emergency request
+                    {data.pendingEmergencyRequests === 1 ? "" : "s"}
+                  </Link>
+                )}
+                {data.pendingPayouts > 0 && (
+                  <Link
+                    href="/admin/contributions"
+                    className="inline-flex items-center gap-2 rounded-lg border bg-info/10 px-3 py-2 text-sm font-medium text-info transition-colors hover:bg-info/20"
+                  >
+                    {data.pendingPayouts} contribution payout
+                    {data.pendingPayouts === 1 ? "" : "s"} awaiting approval
+                  </Link>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section aria-label="Financial overview" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <DashboardStatCard
           title="Total Wallet Balance"
           value={formatNaira(data.totalFunds)}
@@ -144,6 +190,41 @@ export default function AdminDashboardPage() {
           description="Requiring review"
           icon={Clock}
           tone="warning"
+        />
+        <DashboardStatCard
+          title="Emergency Requests"
+          value={data.pendingEmergencyRequests.toString()}
+          description="Awaiting review"
+          icon={Clock}
+          tone="warning"
+        />
+        <DashboardStatCard
+          title="Pending Payouts"
+          value={data.pendingPayouts.toString()}
+          description="Contribution payouts to approve"
+          icon={Wallet}
+          tone="info"
+        />
+        <DashboardStatCard
+          title="Commission Revenue"
+          value={formatNaira(data.totalCommissions)}
+          description="Lifetime commissions collected"
+          icon={Wallet}
+          tone="success"
+        />
+        <DashboardStatCard
+          title="Completed Withdrawals"
+          value={data.completedWithdrawals.toString()}
+          description="Paid out successfully"
+          icon={Wallet}
+          tone="success"
+        />
+        <DashboardStatCard
+          title="Failed Transactions"
+          value={data.failedTransactions.toString()}
+          description="Needs manual attention"
+          icon={Wallet}
+          tone="default"
         />
         <DashboardStatCard
           title="Monthly Volume"

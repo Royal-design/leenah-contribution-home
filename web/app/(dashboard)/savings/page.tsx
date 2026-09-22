@@ -127,7 +127,8 @@ export default function SavingsPage() {
       <WithdrawDialog
         open={withdrawOpen}
         onOpenChange={setWithdrawOpen}
-        balance={savings.data?.balance ?? 0}
+        available={savings.data?.balance ?? 0}
+        mode="wallet"
       />
     </div>
   )

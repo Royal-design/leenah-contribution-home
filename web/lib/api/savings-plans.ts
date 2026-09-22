@@ -14,7 +14,14 @@ export interface SavingsPlansQuery {
   pageSize?: number
 }
 
-export interface CreateSavingsPlanPayload {
+export interface SavingsPlanCommissionFields {
+  commissionEnabled?: boolean
+  commissionType?: string
+  commissionRate?: number
+  commissionFixed?: number
+}
+
+export interface CreateSavingsPlanPayload extends SavingsPlanCommissionFields {
   name: string
   description?: string
   organization?: string
@@ -27,7 +34,7 @@ export interface CreateSavingsPlanPayload {
   isOpen?: boolean
 }
 
-export interface UpdateSavingsPlanPayload {
+export interface UpdateSavingsPlanPayload extends SavingsPlanCommissionFields {
   name?: string
   description?: string
   organization?: string
@@ -127,6 +134,10 @@ export async function apiAdminCreateSavingsPlan(
     duration_months: payload.durationMonths,
     status: payload.status,
     is_open: payload.isOpen,
+    commission_enabled: payload.commissionEnabled,
+    commission_type: payload.commissionType,
+    commission_rate: payload.commissionRate,
+    commission_fixed: payload.commissionFixed,
   })
   return mapSavingsPlan(data)
 }
@@ -146,6 +157,10 @@ export async function apiAdminUpdateSavingsPlan(
     duration_months: payload.durationMonths,
     status: payload.status,
     is_open: payload.isOpen,
+    commission_enabled: payload.commissionEnabled,
+    commission_type: payload.commissionType,
+    commission_rate: payload.commissionRate,
+    commission_fixed: payload.commissionFixed,
   })
   return mapSavingsPlan(data)
 }

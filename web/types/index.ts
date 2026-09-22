@@ -68,6 +68,15 @@ export interface ContributionPayout {
   status: PayoutStatus
   paidAt?: string
   transactionId?: string
+  eligibleAt?: string
+  reviewedBy?: string
+  reviewedAt?: string
+  adminNote?: string
+  grossAmount?: number
+  commissionRate?: number
+  commissionType?: string
+  commissionAmount?: number
+  netAmount?: number
 }
 
 export interface WithdrawalRule {
@@ -101,6 +110,10 @@ export interface Contribution {
   organization?: string
   createdBy?: string
   isOpen: boolean
+  commissionEnabled: boolean
+  commissionType?: string
+  commissionRate?: number
+  commissionFixed?: number
 }
 
 export type SavingsGoalStatus = "active" | "paused" | "completed"
@@ -146,6 +159,11 @@ export interface SavingsPlan {
   progress: number
   status: SavingsPlanStatus
   isOpen: boolean
+  commissionEnabled: boolean
+  commissionType?: string
+  commissionRate?: number
+  commissionFixed?: number
+  withdrawableAmount: number
   enrollCount: number
   createdBy: string
   createdAt: string
@@ -196,6 +214,22 @@ export interface Transaction {
   description: string
   date: string
   reference: string
+  currency?: string
+  source?: string
+  grossAmount?: number
+  commissionRate?: number
+  commissionType?: string
+  commissionAmount?: number
+  feeAmount?: number
+  netAmount?: number
+  relatedSavingsPlanId?: string
+  relatedContributionId?: string
+  relatedWithdrawalId?: string
+  relatedEmergencyRequestId?: string
+  completedAt?: string
+  approvedBy?: string
+  approvedAt?: string
+  failureReason?: string
   metadata?: {
     contributionName?: string
     method?: string
@@ -203,6 +237,14 @@ export interface Transaction {
     fee?: number
   }
 }
+
+export type WithdrawalChannel = "wallet" | "bank"
+export type WithdrawalSource =
+  | "wallet"
+  | "savings_plan"
+  | "contribution"
+  | "emergency"
+  | "admin"
 
 export type WithdrawalStatus = "pending" | "approved" | "processing" | "rejected" | "completed" | "failed" | "reversed"
 
@@ -215,18 +257,30 @@ export interface Withdrawal {
   requestedAt: string
   destination: string
   status: WithdrawalStatus
+  channel: WithdrawalChannel
+  source: WithdrawalSource
   contributionName?: string
   bankName?: string
   accountName?: string
   accountNumber?: string
   maskedAccountNumber?: string
   processingMessage?: string
+  reason?: string
+  adminNote?: string
   reviewedAt?: string
   approvedAt?: string
   completedAt?: string
   rejectedAt?: string
   failureReason?: string
   bankAccountId?: string
+  relatedSavingsPlanId?: string
+  relatedContributionId?: string
+  grossAmount?: number
+  commissionRate?: number
+  commissionType?: string
+  commissionAmount?: number
+  feeAmount?: number
+  netAmount?: number
   paystackRecipientCode?: string
   paystackTransferCode?: string
   paystackReference?: string
@@ -349,6 +403,29 @@ export interface AdminStats {
     month: string
     volume: number
   }>
+  pendingEmergencyRequests: number
+  pendingPayouts: number
+  totalCommissions: number
+  completedWithdrawals: number
+  failedTransactions: number
+}
+
+export interface CommissionEntry {
+  enabled: boolean
+  type: "percentage" | "fixed" | "percentage_fixed"
+  rate: number
+  fixed: number
+}
+
+export interface CommissionSettings {
+  defaults: Record<string, CommissionEntry>
+  keys: string[]
+}
+
+export interface CommissionLedgerItem {
+  byType: Array<{ type: string; total: number }>
+  bySource: Array<{ source: string | null; total: number }>
+  total: number
 }
 
 export interface DashboardOverview {

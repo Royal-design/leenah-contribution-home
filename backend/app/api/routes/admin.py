@@ -29,6 +29,7 @@ from app.schemas.contribution import (
 )
 from app.schemas.notification import BroadcastMessageRequest, DirectMessageRequest
 from app.schemas.paystack import WithdrawalApproveRequest, WithdrawalRejectRequest
+from app.schemas.commission import CommissionSettingsOut, CommissionSettingsUpdate
 from app.schemas.response import MessageResponse, SuccessResponse
 from app.schemas.savings_plan import SavingsPlanCreate, SavingsPlanOut, SavingsPlanUpdate
 from app.schemas.transaction import TransactionOut
@@ -40,8 +41,9 @@ from app.schemas.user import (
     UpdateUserStatusRequest,
     UserOut,
 )
-from app.schemas.withdrawal import WithdrawalOut, WithdrawalReview
+from app.schemas.withdrawal import AdminPayoutRequest, WithdrawalOut, WithdrawalReview
 from app.services.analytics_service import analytics_service
+from app.services.commission_service import commission_service
 from app.services.contribution_service import contribution_service
 from app.services.notification_service import notification_service
 from app.services.savings_plan_service import savings_plan_service
@@ -393,11 +395,37 @@ def list_all_withdrawals(
     _: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
     status: WithdrawalStatus | None = Query(default=None),
+    source: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ):
-    data = withdrawal_service.list_all(db, status=status, page=page, page_size=page_size)
+    data = withdrawal_service.list_all(db, status=status, source=source, page=page, page_size=page_size)
     return SuccessResponse(message="Withdrawals retrieved.", data=data)
+
+
+@router.post("/withdrawals", response_model=SuccessResponse[WithdrawalOut])
+def admin_initiate_payout(
+    payload: AdminPayoutRequest,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin-controlled withdrawal/payout executed on a user's behalf."""
+    target = user_repository.get(db, payload.user_id)
+    if target is None:
+        raise AppException(message="User not found.", status_code=404, error_code="USER_NOT_FOUND")
+    withdrawal = withdrawal_service.admin_payout(
+        db,
+        actor=admin,
+        user=target,
+        amount=payload.amount,
+        channel=payload.channel.value,
+        reason=payload.reason,
+        bank_account_id=payload.bank_account_id,
+        savings_plan_id=payload.savings_plan_id,
+        contribution_id=payload.contribution_id,
+        admin_note=payload.admin_note,
+    )
+    return SuccessResponse(message="Admin payout processed.", data=WithdrawalOut.model_validate(withdrawal))
 
 
 @router.get("/withdrawals/{withdrawal_id}", response_model=SuccessResponse[WithdrawalOut])
@@ -452,6 +480,84 @@ def complete_withdrawal(
 ):
     withdrawal = withdrawal_service.complete(db, actor=admin, withdrawal_id=withdrawal_id)
     return SuccessResponse(message="Withdrawal marked as completed.", data=WithdrawalOut.model_validate(withdrawal))
+
+
+# ---- Contribution payouts ----
+
+@router.get("/payouts")
+def list_pending_payouts(_: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    data = contribution_service.list_pending_payouts(db)
+    return SuccessResponse(message="Payouts retrieved.", data=data)
+
+
+@router.post("/payouts/{payout_id}/approve")
+def approve_payout(
+    payout_id: uuid.UUID,
+    payload: WithdrawalApproveRequest | None = None,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    payout = contribution_service.approve_payout(db, actor=admin, payout_id=payout_id, note=(payload.reason if payload else None))
+    return SuccessResponse(message="Payout approved and credited to member wallet.", data={"payout_id": str(payout.id), "status": payout.status.value})
+
+
+@router.post("/payouts/{payout_id}/reject")
+def reject_payout(
+    payout_id: uuid.UUID,
+    payload: WithdrawalRejectRequest,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    payout = contribution_service.reject_payout(db, actor=admin, payout_id=payout_id, note=payload.reason)
+    return SuccessResponse(message="Payout rejected.", data={"payout_id": str(payout.id), "status": payout.status.value})
+
+
+# ---- Commission ledger & settings ----
+
+@router.get("/commissions")
+def list_commission_ledger(
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+):
+    data = transaction_service.list_commissions(db, page=page, page_size=page_size)
+    return SuccessResponse(message="Commission ledger retrieved.", data=data)
+
+
+@router.get("/commissions/summary")
+def commission_summary(_: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    data = transaction_service.commission_summary(db)
+    return SuccessResponse(message="Commission summary retrieved.", data=data)
+
+
+@router.get("/settings/commissions", response_model=SuccessResponse[CommissionSettingsOut])
+def get_commission_settings(_: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    data = commission_service.get_settings_dto(db)
+    return SuccessResponse(message="Commission settings retrieved.", data=data)
+
+
+@router.put("/settings/commissions")
+def update_commission_settings(
+    payload: CommissionSettingsUpdate,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    normalized = commission_service.set_defaults(db, payload.defaults, actor_id=admin.id)
+    audit_log_repository.create(
+        db,
+        actor_id=admin.id,
+        actor_name=f"{admin.first_name} {admin.last_name}",
+        actor_email=admin.email,
+        actor_role=admin.role,
+        action=AuditAction.SETTINGS_UPDATE,
+        category=AuditCategory.SETTINGS,
+        description="Updated platform commission settings.",
+        target="commission_settings",
+        details={"defaults": normalized},
+    )
+    return SuccessResponse(message="Commission settings updated.", data=commission_service.get_settings_dto(db))
+
 
 
 # ---- Messages ----

@@ -27,6 +27,63 @@ class WithdrawalRepository:
             select(Withdrawal).where(Withdrawal.paystack_reference == reference)
         ).scalar_one_or_none()
 
+    def exists_pending_duplicate(
+        self,
+        db: Session,
+        *,
+        user_id: uuid.UUID,
+        withdrawal_type: str,
+        amount: int,
+        channel=None,
+    ) -> bool:
+        """Guard against double-click / duplicate submission of the same request."""
+        conditions = [
+            Withdrawal.user_id == user_id,
+            Withdrawal.withdrawal_type == withdrawal_type,
+            Withdrawal.status == WithdrawalStatus.PENDING,
+            Withdrawal.amount == amount,
+        ]
+        if channel is not None:
+            conditions.append(Withdrawal.channel == channel)
+        return db.execute(select(Withdrawal.id).where(*conditions)).first() is not None
+
+    def _gross(self, withdrawal: Withdrawal) -> int:
+        """Gross monetary value; falls back to `amount` for legacy rows."""
+        if withdrawal.gross_amount is not None:
+            return withdrawal.gross_amount
+        return withdrawal.amount
+
+    def sum_gross_for_plan(self, db: Session, *, savings_plan_id: uuid.UUID, user_id: uuid.UUID) -> int:
+        rows = db.execute(
+            select(Withdrawal).where(
+                Withdrawal.related_savings_plan_id == savings_plan_id,
+                Withdrawal.user_id == user_id,
+                Withdrawal.status.notin_(
+                    [
+                        WithdrawalStatus.REJECTED,
+                        WithdrawalStatus.FAILED,
+                        WithdrawalStatus.REVERSED,
+                    ]
+                ),
+            )
+        ).scalars().all()
+        return sum(self._gross(w) for w in rows)
+
+    def sum_gross_for_contribution(self, db: Session, *, contribution_id: uuid.UUID) -> int:
+        rows = db.execute(
+            select(Withdrawal).where(
+                Withdrawal.related_contribution_id == contribution_id,
+                Withdrawal.status.notin_(
+                    [
+                        WithdrawalStatus.REJECTED,
+                        WithdrawalStatus.FAILED,
+                        WithdrawalStatus.REVERSED,
+                    ]
+                ),
+            )
+        ).scalars().all()
+        return sum(self._gross(w) for w in rows)
+
     def list_mine(
         self,
         db: Session,
@@ -57,12 +114,15 @@ class WithdrawalRepository:
         db: Session,
         *,
         status: WithdrawalStatus | None = None,
+        source: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[Withdrawal], int]:
         conditions = []
         if status is not None:
             conditions.append(Withdrawal.status == status)
+        if source is not None:
+            conditions.append(Withdrawal.source == source)
 
         base = select(Withdrawal)
         count_q = select(func.count(Withdrawal.id))
@@ -80,6 +140,14 @@ class WithdrawalRepository:
         return db.execute(
             select(func.count(Withdrawal.id)).where(Withdrawal.status == WithdrawalStatus.PENDING)
         ).scalar_one()
+
+    def count_by(self, db: Session, *, status: WithdrawalStatus | None = None, source: str | None = None) -> int:
+        conditions = []
+        if status is not None:
+            conditions.append(Withdrawal.status == status)
+        if source is not None:
+            conditions.append(Withdrawal.source == source)
+        return db.execute(select(func.count(Withdrawal.id)).where(*conditions)).scalar_one()
 
 
 withdrawal_repository = WithdrawalRepository()

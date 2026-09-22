@@ -75,6 +75,7 @@ function TransactionTypeIcon({
 export function TransactionItem({ transaction }: { transaction: Transaction }) {
   const status = transactionStatusMeta[transaction.status]
   const isIncoming = transaction.type !== "withdrawal"
+  const hasCommission = (transaction.commissionAmount ?? 0) > 0
 
   return (
     <div className="flex items-center gap-3 px-2 py-2.5">
@@ -84,6 +85,12 @@ export function TransactionItem({ transaction }: { transaction: Transaction }) {
         <p className="text-xs text-muted-foreground">
           {formatDate(transaction.date)} · {transaction.reference}
         </p>
+        {hasCommission && (
+          <p className="text-xs text-muted-foreground">
+            Commission {formatNaira(transaction.commissionAmount ?? 0)} · Net{" "}
+            {formatNaira(transaction.netAmount ?? transaction.amount)}
+          </p>
+        )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
         <span

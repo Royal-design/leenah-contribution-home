@@ -23,6 +23,8 @@ import { Input } from "@/components/ui/input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { CommissionSettingsCard } from "@/components/admin/commission-settings-card"
+import { CommissionRevenueCard } from "@/components/admin/commission-revenue-card"
 import { useAuthStore } from "@/stores/auth-store"
 
 const settingsSchema = z.object({
@@ -243,6 +245,10 @@ export default function AdminSettingsPage() {
       </form>
 
       <div className="flex max-w-3xl flex-col gap-6">
+        <CommissionSettingsCard />
+
+        <CommissionRevenueCard />
+
         <Card>
           <CardHeader>
             <CardTitle>Appearance</CardTitle>

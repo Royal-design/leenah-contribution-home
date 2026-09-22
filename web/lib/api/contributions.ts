@@ -37,6 +37,10 @@ export interface UpdateContributionPayload {
   withdrawalDate?: string
   status?: ContributionStatus
   isOpen?: boolean
+  commissionEnabled?: boolean
+  commissionType?: string
+  commissionRate?: number
+  commissionFixed?: number
 }
 
 export async function apiGetContributions(

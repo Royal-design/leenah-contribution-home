@@ -23,6 +23,8 @@ const typeLabels: Record<string, string> = {
   savings: "Savings",
   funding: "Funding",
   withdrawal: "Withdrawal",
+  emergency: "Emergency withdrawals",
+  commission: "Commissions",
 }
 
 const statusLabels: Record<string, string> = {
@@ -35,7 +37,9 @@ const statusLabels: Record<string, string> = {
 
 export default function TransactionsPage() {
   const [search, setSearch] = React.useState("")
-  const [type, setType] = React.useState<TransactionType | "all">("all")
+  const [type, setType] = React.useState<
+    TransactionType | "all" | "emergency" | "commission"
+  >("all")
   const [status, setStatus] = React.useState<TransactionStatus | "all">("all")
   const [page, setPage] = React.useState(1)
   const [debouncedSearch, setDebouncedSearch] = React.useState("")
@@ -86,10 +90,10 @@ export default function TransactionsPage() {
           />
         </div>
         <Select value={type} onValueChange={(value) => {
-            setType(value as TransactionType | "all")
+            setType(value as typeof type)
             setPage(1)
           }}>
-          <SelectTrigger className="w-full sm:w-36" aria-label="Filter by type">
+          <SelectTrigger className="w-full sm:w-44" aria-label="Filter by type">
             <SelectValue>
               {(value) => typeLabels[(value as string) ?? "all"] ?? "All types"}
             </SelectValue>
@@ -100,6 +104,8 @@ export default function TransactionsPage() {
             <SelectItem value="savings">Savings</SelectItem>
             <SelectItem value="funding">Funding</SelectItem>
             <SelectItem value="withdrawal">Withdrawal</SelectItem>
+            <SelectItem value="emergency">Emergency withdrawals</SelectItem>
+            <SelectItem value="commission">Commissions</SelectItem>
           </SelectContent>
         </Select>
         <Select value={status} onValueChange={(value) => {

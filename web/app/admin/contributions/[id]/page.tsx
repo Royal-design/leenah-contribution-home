@@ -22,15 +22,19 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   useAdminAddContributionMember,
+  useAdminApprovePayout,
   useAdminContribution,
   useAdminDeleteContribution,
+  useAdminRejectPayout,
   useAdminRemoveContributionMember,
   useAdminSetContributionMemberPosition,
   useAdminUsers,
 } from "@/hooks/queries/use-admin"
+import { Badge } from "@/components/ui/badge"
+import { CommissionBreakdown } from "@/components/shared/commission-breakdown"
 import { formatDate, formatMonthYear, formatNaira, getInitials } from "@/lib/format"
 import { planHasStarted } from "@/lib/dates"
 import { cn } from "@/lib/utils"
@@ -158,6 +162,11 @@ export default function AdminContributionDetailPage() {
   const [addOpen, setAddOpen] = React.useState(false)
   const [pendingDelete, setPendingDelete] = React.useState(false)
   const [pendingRemove, setPendingRemove] = React.useState<ContributionMember | null>(null)
+  const approvePayout = useAdminApprovePayout()
+  const rejectPayout = useAdminRejectPayout()
+  const [pendingApprovePayout, setPendingApprovePayout] = React.useState<ContributionPayout | null>(null)
+  const [pendingRejectPayout, setPendingRejectPayout] = React.useState<ContributionPayout | null>(null)
+  const [rejectReason, setRejectReason] = React.useState("")
 
   if (isPending) {
     return (
@@ -267,6 +276,61 @@ export default function AdminContributionDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {(() => {
+        const pendingApprovals = (contribution.payouts ?? []).filter(
+          (payout) => payout.status === "pending" && Boolean(payout.eligibleAt)
+        )
+        if (pendingApprovals.length === 0) return null
+        return (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardHeader>
+              <CardTitle>Payouts awaiting approval</CardTitle>
+              <CardDescription>
+                Contribution payouts require admin approval before money is
+                credited to the member&apos;s wallet.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              {pendingApprovals.map((payout) => {
+                const memberName =
+                  contribution.members.find((m) => m.id === payout.memberId)?.name ?? "—"
+                return (
+                  <div
+                    key={payout.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">
+                        Round {payout.roundNumber} · {memberName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Eligible {payout.eligibleAt ? formatDate(payout.eligibleAt) : "—"} ·{" "}
+                        {formatNaira(payout.grossAmount ?? payout.amount)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setRejectReason("")
+                          setPendingRejectPayout(payout)
+                        }}
+                      >
+                        Reject
+                      </Button>
+                      <Button size="sm" onClick={() => setPendingApprovePayout(payout)}>
+                        Approve payout
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -429,6 +493,116 @@ export default function AdminContributionDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={!!pendingApprovePayout} onOpenChange={(open) => !open && setPendingApprovePayout(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Approve payout?</DialogTitle>
+            <DialogDescription>
+              Review the payout summary before crediting the member&apos;s wallet.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingApprovePayout && (
+            <div className="flex flex-col gap-4">
+              <div className="rounded-xl border bg-muted/40 p-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Member</span>
+                  <span className="font-medium">
+                    {
+                      contribution.members.find(
+                        (m) => m.id === pendingApprovePayout?.memberId
+                      )?.name
+                    }
+                  </span>
+                </div>
+                <div className="mt-1.5 flex items-center justify-between">
+                  <span className="text-muted-foreground">Round</span>
+                  <span className="font-medium">Round {pendingApprovePayout.roundNumber}</span>
+                </div>
+                <div className="mt-1.5 flex items-center justify-between">
+                  <span className="text-muted-foreground">Destination</span>
+                  <span className="font-medium">Member wallet</span>
+                </div>
+              </div>
+              <CommissionBreakdown
+                gross={pendingApprovePayout.grossAmount ?? pendingApprovePayout.amount}
+                commission={pendingApprovePayout.commissionAmount}
+                fee={undefined}
+                net={pendingApprovePayout.netAmount}
+                netLabel="Net payout"
+              />
+              <p className="text-xs text-muted-foreground">
+                Approving credits the net payout to the member&apos;s wallet and
+                records the transaction in the ledger.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPendingApprovePayout(null)}
+              disabled={approvePayout.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!pendingApprovePayout) return
+                approvePayout.mutate(
+                  { payoutId: pendingApprovePayout.id },
+                  { onSuccess: () => setPendingApprovePayout(null) }
+                )
+              }}
+              disabled={approvePayout.isPending}
+            >
+              {approvePayout.isPending ? "Approving…" : "Approve payout"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!pendingRejectPayout} onOpenChange={(open) => !open && setPendingRejectPayout(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject payout?</DialogTitle>
+            <DialogDescription>
+              The payout will be skipped. Provide a reason for this decision.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <Input
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              placeholder="Reason for rejection"
+            />
+            <p className="text-xs text-muted-foreground">
+              Rejecting does not move any money.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPendingRejectPayout(null)}
+              disabled={rejectPayout.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={rejectPayout.isPending || rejectReason.trim().length === 0}
+              onClick={() => {
+                if (!pendingRejectPayout) return
+                rejectPayout.mutate(
+                  { payoutId: pendingRejectPayout.id, reason: rejectReason.trim() },
+                  { onSuccess: () => setPendingRejectPayout(null) }
+                )
+              }}
+            >
+              {rejectPayout.isPending ? "Rejecting…" : "Reject payout"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AddMemberDialog
         open={addOpen}

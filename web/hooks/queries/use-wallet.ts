@@ -13,6 +13,8 @@ import {
   apiSaveBankAccount,
   apiDeleteBankAccount,
   apiRequestWithdrawal,
+  apiGetMyWithdrawals,
+  apiPreviewWithdrawal,
   type InitializeCardPayload,
   type SaveBankAccountPayload,
   type RequestWithdrawalPayload,
@@ -128,9 +130,46 @@ export function useRequestWithdrawal() {
         "Withdrawal request submitted. Your withdrawal will be reviewed and processed within 24 hours."
       )
       queryClient.invalidateQueries({ queryKey: queryKeys.savings.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.wallet.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.withdrawals.all })
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions.all })
     },
     onError: (error: Error) => toast.error(getErrorMessage(error)),
+  })
+}
+
+export function useWithdrawalPreview(input: {
+  amount: number
+  withdrawalType: "savings" | "contribution"
+  channel?: "wallet" | "bank"
+  source?: "user" | "emergency" | "admin"
+  contributionId?: string
+  savingsPlanId?: string
+} | null) {
+  return useQuery({
+    queryKey: ["withdrawal-preview", input ?? {}],
+    queryFn: () =>
+      apiPreviewWithdrawal({
+        amount: input!.amount,
+        withdrawalType: input!.withdrawalType,
+        channel: input!.channel,
+        source: input!.source,
+        contributionId: input!.contributionId,
+        savingsPlanId: input!.savingsPlanId,
+      }),
+    enabled: !!input && input.amount > 0,
+    placeholderData: (prev) => prev,
+    staleTime: 15_000,
+  })
+}
+
+export function useMyWithdrawals(params?: {
+  status?: import("@/types").WithdrawalStatus
+  page?: number
+  pageSize?: number
+}) {
+  return useQuery({
+    queryKey: queryKeys.withdrawals.list(params ?? {}),
+    queryFn: () => apiGetMyWithdrawals(params),
   })
 }

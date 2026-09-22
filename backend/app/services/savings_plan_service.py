@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -26,6 +27,7 @@ from app.repositories.savings_plan_repository import (
     savings_plan_schedule_repository,
 )
 from app.repositories.user_repository import user_repository
+from app.repositories.withdrawal_repository import withdrawal_repository
 from app.schemas.savings_plan import (
     SavingsPlanEnrollmentDetailOut,
     SavingsPlanEnrollmentOut,
@@ -67,6 +69,10 @@ class SavingsPlanService:
             "is_open": plan.is_open,
             "created_by": plan.created_by,
             "created_at": plan.created_at,
+            "commission_enabled": plan.commission_enabled,
+            "commission_type": plan.commission_type,
+            "commission_rate": plan.commission_rate,
+            "commission_fixed": plan.commission_fixed,
         }
 
     def _active_enrollments(self, plan: SavingsPlan) -> list[SavingsPlanEnrollment]:
@@ -74,6 +80,7 @@ class SavingsPlanService:
 
     def _build_out(
         self,
+        db: Session,
         plan: SavingsPlan,
         *,
         viewer_id: uuid.UUID | None = None,
@@ -88,15 +95,18 @@ class SavingsPlanService:
         if enrollment_id is not None:
             schedule_in = [s for s in plan.schedule if s.enrollment_id == enrollment_id]
 
+        withdrawable = self._withdrawable_for(db, plan, viewer)
+
         return SavingsPlanOut(
             **self._base_fields(plan),
             enroll_count=len(active),
             enrollment=SavingsPlanEnrollmentOut.model_validate(viewer) if viewer is not None else None,
             schedule=[SavingsPlanScheduleOut.model_validate(s) for s in schedule_in],
+            withdrawable_amount=withdrawable,
         )
 
     def _build_list_out(
-        self, plan: SavingsPlan, *, viewer_id: uuid.UUID | None = None
+        self, plan: SavingsPlan, *, viewer_id: uuid.UUID | None = None, db: Session | None = None
     ) -> SavingsPlanOut:
         """Lightweight list item: summary + active enrollments + viewer status."""
         viewer = None
@@ -105,12 +115,26 @@ class SavingsPlanService:
                 (e for e in plan.enrollments if e.user_id == viewer_id and e.status == EnrollmentStatus.ACTIVE),
                 None,
             )
+        withdrawable = self._withdrawable_for(db, plan, viewer) if db is not None else 0
         return SavingsPlanOut(
             **self._base_fields(plan),
             enroll_count=len(self._active_enrollments(plan)),
             enrollment=SavingsPlanEnrollmentOut.model_validate(viewer) if viewer is not None else None,
             schedule=[],
+            withdrawable_amount=withdrawable,
         )
+
+    def _withdrawable_for(self, db: Session | None, plan: SavingsPlan, viewer: SavingsPlanEnrollment | None) -> int:
+        """How much of the viewer's completed savings can still be withdrawn.
+
+        Pot-based accounting: plan savings are paid out of the user's wallet
+        into the plan pot over time; eligible savings = total saved minus what
+        has already been paid back through withdrawals.
+        """
+        if db is None or viewer is None or viewer.status != EnrollmentStatus.ACTIVE:
+            return 0
+        withdrawn = withdrawal_repository.sum_gross_for_plan(db, savings_plan_id=plan.id, user_id=viewer.user_id)
+        return max(viewer.total_saved - withdrawn, 0)
 
     @staticmethod
     def _paginated(*, total: int, page: int, page_size: int) -> dict:
@@ -187,6 +211,10 @@ class SavingsPlanService:
             rounds=max(rounds, 1),
             status=payload.status or SavingsPlanStatus.UPCOMING,
             is_open=payload.is_open,
+            commission_enabled=payload.commission_enabled or False,
+            commission_type=payload.commission_type,
+            commission_rate=Decimal(str(payload.commission_rate)) if payload.commission_rate is not None else None,
+            commission_fixed=payload.commission_fixed,
         )
 
         audit_log_repository.create(
@@ -211,7 +239,7 @@ class SavingsPlanService:
 
         self._sync(db, plan)
         self._recompute_totals(db, plan)
-        return self._build_out(plan)
+        return self._build_out(db, plan)
 
     # ------------------------------------------------------------------- read
 
@@ -226,26 +254,26 @@ class SavingsPlanService:
             if enrollment is not None and enrollment.status == EnrollmentStatus.ACTIVE
             else None
         )
-        return self._build_out(plan, viewer_id=user.id if user else None, enrollment_id=enrollment_id)
+        return self._build_out(db, plan, viewer_id=user.id if user else None, enrollment_id=enrollment_id)
 
     def list_mine(self, db: Session, *, user: User, status=None, page: int = 1, page_size: int = 20):
         items, total = savings_plan_repository.list_mine(db, user.id, status=status, page=page, page_size=page_size)
         return {
-            "items": [self._build_list_out(item, viewer_id=user.id) for item in items],
+            "items": [self._build_list_out(item, viewer_id=user.id, db=db) for item in items],
             **self._paginated(total=total, page=page, page_size=page_size),
         }
 
     def list_open(self, db: Session, *, page: int = 1, page_size: int = 20):
         items, total = savings_plan_repository.list_open(db, page=page, page_size=page_size)
         return {
-            "items": [self._build_list_out(item) for item in items],
+            "items": [self._build_list_out(item, db=db) for item in items],
             **self._paginated(total=total, page=page, page_size=page_size),
         }
 
     def list_all(self, db: Session, *, status=None, search: str | None = None, page: int = 1, page_size: int = 20):
         items, total = savings_plan_repository.list_all(db, status=status, search=search, page=page, page_size=page_size)
         return {
-            "items": [self._build_list_out(item) for item in items],
+            "items": [self._build_list_out(item, db=db) for item in items],
             **self._paginated(total=total, page=page, page_size=page_size),
         }
 
@@ -310,6 +338,11 @@ class SavingsPlanService:
             if value is not None:
                 setattr(plan, key, value)
 
+        if "commission_enabled" in data and not data["commission_enabled"]:
+            plan.commission_type = None
+            plan.commission_rate = None
+            plan.commission_fixed = None
+
         if plan.end_date is not None and plan.end_date < plan.start_date:
             raise AppException(
                 message="End date must be on or after the start date.",
@@ -334,7 +367,7 @@ class SavingsPlanService:
 
         self._sync(db, plan)
         self._recompute_totals(db, plan)
-        return self._build_out(plan)
+        return self._build_out(db, plan)
 
     def delete(self, db: Session, *, user: User, plan_id: uuid.UUID) -> None:
         plan = self._get_or_404(db, plan_id)
@@ -435,7 +468,7 @@ class SavingsPlanService:
 
         self._sync(db, plan)
         self._recompute_totals(db, plan)
-        return self._build_out(plan, viewer_id=user.id, enrollment_id=enrollment.id)
+        return self._build_out(db, plan, viewer_id=user.id, enrollment_id=enrollment.id)
 
     def leave(self, db: Session, *, user: User, plan_id: uuid.UUID) -> None:
         plan = self._get_or_404(db, plan_id)
@@ -526,7 +559,7 @@ class SavingsPlanService:
 
         self._sync(db, plan)
         self._recompute_totals(db, plan)
-        return self._build_out(plan)
+        return self._build_out(db, plan)
 
     def admin_remove_member(
         self, db: Session, *, actor: User, plan_id: uuid.UUID, user_id: uuid.UUID
@@ -574,7 +607,7 @@ class SavingsPlanService:
 
         self._sync(db, plan)
         self._recompute_totals(db, plan)
-        return self._build_out(plan)
+        return self._build_out(db, plan)
 
     # --------------------------------------------------------------- payments
 
@@ -707,7 +740,7 @@ class SavingsPlanService:
                 error_code="INSUFFICIENT_FUNDS",
             )
 
-        return self._build_out(plan, viewer_id=user.id, enrollment_id=enrollment.id)
+        return self._build_out(db, plan, viewer_id=user.id, enrollment_id=enrollment.id)
 
     def run_automatic(self, db: Session, *, plan_id: uuid.UUID | None = None) -> dict:
         """Attempt to collect due savings payments from funded wallets.

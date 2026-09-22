@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/shared/page-header"
 import { SectionHeader } from "@/components/shared/section-header"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { PageSkeleton } from "@/components/shared/skeletons"
 import { FundingDialog } from "@/components/forms/funding-dialog"
 import { WithdrawDialog } from "@/components/forms/withdraw-dialog"
@@ -22,8 +23,21 @@ import { useContributions, useOpenContributions } from "@/hooks/queries/use-cont
 import { useSavings } from "@/hooks/queries/use-savings"
 import { useMySavingsPlans, useOpenSavingsPlans } from "@/hooks/queries/use-savings-plans"
 import { useRecentTransactions } from "@/hooks/queries/use-transactions"
+import { useMyWithdrawals } from "@/hooks/queries/use-wallet"
 import { formatDate, formatNaira } from "@/lib/format"
 import { planHasStarted } from "@/lib/dates"
+import { cn } from "@/lib/utils"
+import type { WithdrawalStatus } from "@/types"
+
+const withdrawalStatusStyle: Record<WithdrawalStatus, { label: string; className: string }> = {
+  pending: { label: "Pending approval", className: "bg-warning/15 text-warning" },
+  approved: { label: "Approved", className: "bg-info/15 text-info" },
+  processing: { label: "Processing", className: "bg-info/15 text-info" },
+  completed: { label: "Completed", className: "bg-success/15 text-success" },
+  rejected: { label: "Rejected", className: "bg-destructive/15 text-destructive" },
+  failed: { label: "Failed", className: "bg-destructive/15 text-destructive" },
+  reversed: { label: "Reversed", className: "bg-warning/15 text-warning" },
+}
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -34,6 +48,7 @@ export default function DashboardPage() {
   const openSavings = useOpenSavingsPlans({ pageSize: 3 })
   const openContributions = useOpenContributions({ pageSize: 3 })
   const recentTxns = useRecentTransactions(5)
+  const withdrawals = useMyWithdrawals({ pageSize: 5 })
   const [fundingOpen, setFundingOpen] = React.useState(false)
   const [withdrawOpen, setWithdrawOpen] = React.useState(false)
 
@@ -42,7 +57,8 @@ export default function DashboardPage() {
     mySavingsPlans.isPending ||
     contributions.isPending ||
     openSavings.isPending ||
-    openContributions.isPending
+    openContributions.isPending ||
+    withdrawals.isPending
 
   if (isLoading) {
     return <PageSkeleton />
@@ -95,6 +111,16 @@ export default function DashboardPage() {
     ...availableContributions.map((plan) => ({ type: "contribution" as const, plan })),
   ].slice(0, 3)
 
+  const myWithdrawals = withdrawals.data?.items ?? []
+  const pendingWithdrawalCount = myWithdrawals.filter((w) =>
+    ["pending", "approved", "processing"].includes(w.status)
+  ).length
+  const completedPlanWithdrawable = joinedSavings
+    .filter((plan) => plan.status === "completed")
+    .reduce((sum, plan) => sum + (plan.withdrawableAmount ?? 0), 0)
+  const availableForWithdrawal = (savings.data?.balance ?? 0) + completedPlanWithdrawable
+  const canWithdrawWallet = (savings.data?.balance ?? 0) > 0
+
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <PageHeader
@@ -127,7 +153,9 @@ export default function DashboardPage() {
             { label: "Explore plans", icon: Compass, href: "/plans", description: "See what you can join" },
             { label: "My plans", icon: Target, href: "/my-plans", description: "Track your progress" },
             { label: "Add money", icon: ArrowLeftRight, onClick: () => setFundingOpen(true), description: "Top up your wallet" },
-            { label: "Withdraw", icon: PiggyBank, onClick: () => setWithdrawOpen(true), description: "Move funds out" },
+            ...(canWithdrawWallet
+              ? [{ label: "Withdraw", icon: PiggyBank, onClick: () => setWithdrawOpen(true), description: "Move funds out" }]
+              : []),
           ]}
         />
       </section>
@@ -160,7 +188,7 @@ export default function DashboardPage() {
         <DashboardStatCard
           title="Wallet balance"
           value={formatNaira(savings.data?.balance ?? 0)}
-          description="Available to fund plans"
+          description={"Available for withdrawal: " + formatNaira(availableForWithdrawal)}
           icon={Wallet}
           tone="default"
         />
@@ -241,11 +269,68 @@ export default function DashboardPage() {
         </div>
       </section>
 
+      {/* Withdrawal requests */}
+      <section aria-label="Withdrawal requests">
+        <SectionHeader
+          title="Withdrawal requests"
+          description={
+            pendingWithdrawalCount > 0
+              ? `${pendingWithdrawalCount} request${pendingWithdrawalCount === 1 ? "" : "s"} awaiting action.`
+              : "Your withdrawal history."
+          }
+        />
+        <div className="mt-4">
+          {myWithdrawals.length === 0 ? (
+            <div className="rounded-xl border bg-card">
+              <EmptyState
+                title="No withdrawal requests"
+                description="Withdrawals go through admin approval. Your requests will appear here."
+              />
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border bg-card">
+              {myWithdrawals.slice(0, 5).map((withdrawal) => {
+                const meta = withdrawalStatusStyle[withdrawal.status]
+                return (
+                  <div
+                    key={withdrawal.id}
+                    className="flex items-center justify-between gap-3 border-b px-4 py-3 text-sm last:border-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">
+                        {formatNaira(withdrawal.netAmount ?? withdrawal.amount)}
+                        <span className="ml-2 text-xs font-normal text-muted-foreground capitalize">
+                          → {withdrawal.channel}
+                          {withdrawal.source === "emergency" ? " · emergency" : ""}
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {withdrawal.destination} · {formatDate(withdrawal.requestedAt)}
+                        {withdrawal.source === "emergency" && withdrawal.reason
+                          ? ` · ${withdrawal.reason}`
+                          : ""}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn("shrink-0 font-medium", meta.className)}
+                    >
+                      {meta.label}
+                    </Badge>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
       <FundingDialog open={fundingOpen} onOpenChange={setFundingOpen} />
       <WithdrawDialog
         open={withdrawOpen}
         onOpenChange={setWithdrawOpen}
-        balance={savings.data?.balance ?? 0}
+        available={savings.data?.balance ?? 0}
+        mode="wallet"
       />
     </div>
   )

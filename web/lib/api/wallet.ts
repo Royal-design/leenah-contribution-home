@@ -125,25 +125,5 @@ export async function apiDeleteBankAccount(id: string): Promise<void> {
 
 /* -------------------------------- Withdrawals -------------------------------- */
 
-export interface RequestWithdrawalPayload {
-  amount: number
-  bankAccountId?: string
-  bankName?: string
-  accountNumber?: string
-  accountName?: string
-  destination?: string
-  contributionId?: string
-}
-
-export async function apiRequestWithdrawal(payload: RequestWithdrawalPayload): Promise<void> {
-  await api.post("/api/withdrawals", {
-    amount: payload.amount,
-    withdrawal_type: "savings",
-    bank_account_id: payload.bankAccountId,
-    bank_name: payload.bankName,
-    account_number: payload.accountNumber,
-    account_name: payload.accountName,
-    destination: payload.destination,
-    contribution_id: payload.contributionId,
-  })
-}
+export { apiRequestWithdrawal, apiGetMyWithdrawals, apiPreviewWithdrawal } from "@/lib/api/withdrawals"
+export type { RequestWithdrawalInput as RequestWithdrawalPayload, WithdrawalQuery, WithdrawalPreview, WithdrawalPreviewInput } from "@/lib/api/withdrawals"

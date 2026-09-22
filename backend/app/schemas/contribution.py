@@ -30,6 +30,11 @@ class ContributionCreate(BaseModel):
     end_date: datetime | None = None
     withdrawal_rule: WithdrawalRuleType | None = None
     fixed_withdrawal_date: datetime | None = None
+    # Optional per-plan commission override (highest priority).
+    commission_enabled: bool = False
+    commission_type: str | None = Field(default=None, max_length=30)
+    commission_rate: float | None = Field(default=None, ge=0, le=100)
+    commission_fixed: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def _validate_dates(self) -> "ContributionCreate":
@@ -53,6 +58,10 @@ class ContributionUpdate(BaseModel):
     withdrawal_date: datetime | None = None
     status: ContributionStatus | None = None
     is_open: bool | None = None
+    commission_enabled: bool | None = None
+    commission_type: str | None = Field(default=None, max_length=30)
+    commission_rate: float | None = Field(default=None, ge=0, le=100)
+    commission_fixed: int | None = Field(default=None, ge=0)
 
 
 class ContributionScheduleOut(BaseModel):
@@ -99,6 +108,15 @@ class ContributionPayoutOut(BaseModel):
     status: PayoutStatus
     paid_at: datetime | None = None
     transaction_id: uuid.UUID | None = None
+    eligible_at: datetime | None = None
+    reviewed_by: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    admin_note: str | None = None
+    gross_amount: int | None = None
+    commission_rate: float | None = None
+    commission_type: str | None = None
+    commission_amount: int | None = None
+    net_amount: int | None = None
 
 
 class ContributionOut(BaseModel):
@@ -123,6 +141,10 @@ class ContributionOut(BaseModel):
     status: ContributionStatus
     withdrawal_rule: dict | None
     is_open: bool
+    commission_enabled: bool = False
+    commission_type: str | None = None
+    commission_rate: float | None = None
+    commission_fixed: int | None = None
     created_by: uuid.UUID
     created_at: datetime
     members: list[ContributionMemberOut] = []

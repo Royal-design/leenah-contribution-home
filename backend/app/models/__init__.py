@@ -7,6 +7,7 @@ from app.models.contribution_schedule import ContributionSchedule
 from app.models.dedicated_account import DedicatedAccount
 from app.models.notification import Notification
 from app.models.payment import Payment
+from app.models.platform_setting import PlatformSetting
 from app.models.refresh_token import RefreshToken
 from app.models.savings_account import SavingsAccount
 from app.models.savings_goal import SavingsGoal
@@ -30,6 +31,7 @@ __all__ = [
     "DedicatedAccount",
     "Notification",
     "Payment",
+    "PlatformSetting",
     "RefreshToken",
     "SavingsAccount",
     "SavingsGoal",

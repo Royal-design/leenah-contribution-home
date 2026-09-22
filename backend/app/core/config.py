@@ -71,6 +71,13 @@ class Settings(BaseSettings):
             return [origin.strip().rstrip("/") for origin in value.split(",") if origin.strip()]
         return value
 
+    @field_validator("paystack_skip_webhook_verification")
+    @classmethod
+    def _never_skip_webhook_in_production(cls, value, info):
+        if value and (info.data.get("environment") or "").lower() == "production":
+            raise ValueError("paystack_skip_webhook_verification must never be enabled in production.")
+        return value
+
 
 @lru_cache
 def get_settings() -> Settings:

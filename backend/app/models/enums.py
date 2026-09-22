@@ -74,6 +74,25 @@ class WithdrawalRuleType(StrEnum):
     FIXED_DATE = "fixed_date"
 
 
+class WithdrawalChannel(StrEnum):
+    WALLET = "wallet"
+    BANK = "bank"
+
+
+class WithdrawalSource(StrEnum):
+    WALLET = "wallet"
+    SAVINGS_PLAN = "savings_plan"
+    CONTRIBUTION = "contribution"
+    EMERGENCY = "emergency"
+    ADMIN = "admin"
+
+
+class CommissionType(StrEnum):
+    PERCENTAGE = "percentage"
+    FIXED = "fixed"
+    PERCENTAGE_FIXED = "percentage_fixed"
+
+
 class SavingsGoalStatus(StrEnum):
     ACTIVE = "active"
     PAUSED = "paused"

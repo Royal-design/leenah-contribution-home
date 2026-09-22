@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.models.enums import (
     PayoutStatus,
     ScheduleStatus,
     TransactionType,
+    WithdrawalSource,
 )
 from app.models.user import User
 from app.repositories.audit_log_repository import audit_log_repository
@@ -33,6 +35,7 @@ from app.schemas.contribution import (
     ContributionPayoutOut,
     ContributionScheduleOut,
 )
+from app.services.commission_service import CONTRIBUTION_PAYOUT, commission_service
 from app.services.notification_service import notification_service
 from app.services.wallet_service import make_reference, wallet_service
 from app.utils.dates import (
@@ -72,6 +75,10 @@ class ContributionService:
             "is_open": contribution.is_open,
             "created_by": contribution.created_by,
             "created_at": contribution.created_at,
+            "commission_enabled": contribution.commission_enabled,
+            "commission_type": contribution.commission_type,
+            "commission_rate": contribution.commission_rate,
+            "commission_fixed": contribution.commission_fixed,
         }
 
     def _build_out(self, contribution: Contribution, *, member_id: uuid.UUID | None = None) -> ContributionOut:
@@ -224,6 +231,10 @@ class ContributionService:
             withdrawal_date=payload.fixed_withdrawal_date,
             withdrawal_rule=withdrawal_rule,
             status=ContributionStatus.UPCOMING,
+            commission_enabled=payload.commission_enabled or False,
+            commission_type=payload.commission_type,
+            commission_rate=Decimal(str(payload.commission_rate)) if payload.commission_rate is not None else None,
+            commission_fixed=payload.commission_fixed,
         )
 
         for index, due in enumerate(self._compute_dates(payload.start_date, payload.frequency.value, payload.rounds)):
@@ -342,9 +353,17 @@ class ContributionService:
         if "fixed_withdrawal_date" in data:
             data.pop("fixed_withdrawal_date")
 
+        if "commission_rate" in data and data.get("commission_rate") is not None:
+            data["commission_rate"] = Decimal(str(data["commission_rate"]))
+
         for key, value in data.items():
             if value is not None:
                 setattr(contribution, key, value)
+
+        if "commission_enabled" in data and not data["commission_enabled"]:
+            contribution.commission_type = None
+            contribution.commission_rate = None
+            contribution.commission_fixed = None
 
         self._sync_schedule(db, contribution)
         self._recompute_totals(db, contribution)
@@ -958,13 +977,15 @@ class ContributionService:
         return self._build_out(contribution, member_id=member.id)
 
     def _process_rotation_payouts(self, db: Session, contribution: Contribution) -> dict:
-        """Pay the rotation for rounds whose contributions are complete.
+        """Mark rotational payout rounds eligible for admin approval.
 
-        Rotational model: the member at position ``p`` receives the pooled
+        Rotational model: the member at position ``p`` is owed the pooled
         round-``p`` contributions once *every* active member has paid at least
-        ``p`` schedules. Idempotent — payouts already PAID are never credited
-        again. The money is credited to the member's wallet ledger so they can
-        withdraw it like any other balance.
+        ``p`` schedules. When a round completes, the payout is flagged eligible
+        (`eligible_at`); it does NOT automatically move money. An admin must
+        approve it (see `approve_payout`) before the member's wallet is
+        credited. Idempotent — eligible/paid/skipped payouts are never touched
+        again, and the rotation order is never modified.
         """
         active = contribution_member_repository.list_active(db, contribution.id)
         if not active:
@@ -983,7 +1004,7 @@ class ContributionService:
             for member in active
         }
 
-        total_payouts = 0
+        marked_eligible = 0
         for member in sorted(active, key=lambda m: m.position):
             position = member.position
             if position < 1:
@@ -992,35 +1013,12 @@ class ContributionService:
                 continue
 
             payout = payouts.get(member.id)
-            if payout is None or payout.status != PayoutStatus.PENDING:
+            if payout is None or payout.status != PayoutStatus.PENDING or payout.amount <= 0:
+                continue
+            if payout.eligible_at is not None:
                 continue
 
-            contributors = [m for m in active if paid_per_member.get(m.id, 0) >= position]
-            actual_amount = contribution.amount * len(contributors)
-            if actual_amount <= 0:
-                continue
-
-            transaction = wallet_service.credit(
-                db,
-                user_id=member.user_id,
-                amount=actual_amount,
-                description=f"Contribution payout — {contribution.name} (Round {position})",
-                reference=make_reference("PAY"),
-                type_=TransactionType.CONTRIBUTION,
-                details={
-                    "contribution_id": str(contribution.id),
-                    "payout": True,
-                    "member_id": str(member.id),
-                    "round_number": position,
-                    "expected_amount": payout.amount,
-                },
-            )
-            payout.status = PayoutStatus.PAID
-            payout.paid_at = _utcnow()
-            payout.transaction_id = transaction.id
-            db.flush()
-            total_payouts += 1
-
+            payout.eligible_at = _utcnow()
             owner = member.user
             audit_log_repository.create(
                 db,
@@ -1028,23 +1026,215 @@ class ContributionService:
                 actor_name=member.display_name,
                 actor_email=owner.email if owner else "",
                 actor_role=owner.role if owner else None,
-                action=AuditAction.CREATE,
+                action=AuditAction.UPDATE,
                 category=AuditCategory.CONTRIBUTION,
-                description=f"Rotational payout {actual_amount} for '{contribution.name}' (Round {position}).",
+                description=f"Round {position} payout for '{contribution.name}' is eligible and awaiting approval.",
                 target=contribution.name,
                 target_id=contribution.id,
-                details={"round_number": position, "transaction_id": str(transaction.id)},
+                details={"round_number": position, "payout_id": str(payout.id), "amount": payout.amount},
             )
-
             notification_service.create(
                 db,
                 user_id=member.user_id,
-                title="Your contribution payout is in",
-                message=f"We credited {actual_amount} to your wallet for '{contribution.name}' (Round {position}).",
+                title="Contribution payout awaiting approval",
+                message=f"Your payout for '{contribution.name}' (Round {position}) is ready and awaiting admin approval.",
                 type_=NotificationType.CONTRIBUTION,
             )
+            marked_eligible += 1
 
-        return {"payouts": total_payouts}
+        db.flush()
+        return {"payouts": marked_eligible}
+
+    # ------------------------------------------------------------ payout review
+
+    def _payout_is_eligible(self, db: Session, contribution: Contribution, member_id: uuid.UUID, position: int) -> bool:
+        """True when every active member has paid the round for this payout."""
+        active = contribution_member_repository.list_active(db, contribution.id)
+        paid_per_member = {
+            m.id: sum(
+                1
+                for s in contribution.schedule
+                if s.member_id == m.id and s.status == ScheduleStatus.PAID
+            )
+            for m in active
+        }
+        return all(paid_per_member.get(m.id, 0) >= position for m in active)
+
+    def list_pending_payouts(self, db: Session) -> dict:
+        from app.schemas.contribution import ContributionPayoutOut
+
+        payouts = contribution_payout_repository.list_eligible_pending(db)
+        rows = []
+        for payout in payouts:
+            contribution = contribution_repository.get(db, payout.contribution_id)
+            member = contribution_member_repository.get_by_id(db, payout.member_id)
+            member_user = member.user if member is not None else None
+            rows.append(
+                {
+                    **ContributionPayoutOut.model_validate(payout).model_dump(),
+                    "user_name": (
+                        f"{member_user.first_name} {member_user.last_name}".strip()
+                        if member_user is not None
+                        else "Unknown user"
+                    ),
+                    "user_email": member_user.email if member_user is not None else None,
+                    "contribution_name": contribution.name if contribution is not None else None,
+                }
+            )
+        return {"items": rows, "total": len(rows)}
+
+    def approve_payout(self, db: Session, *, actor: User, payout_id: uuid.UUID, note: str | None = None) -> ContributionPayout:
+        """Admin approval gate for a rotational payout.
+
+        When a round completes, money is NOT credited automatically. An admin
+        reviews the payout and approving it credits the NET amount (after any
+        configured commission) to the member's wallet. Idempotent status
+        guard prevents double approval / double credit.
+        """
+        payout = contribution_payout_repository.get_locked(db, payout_id)
+        if payout is None:
+            raise AppException(message="Payout not found.", status_code=404, error_code="PAYOUT_NOT_FOUND")
+        if payout.status != PayoutStatus.PENDING:
+            raise AppException(
+                message="This payout has already been reviewed.",
+                status_code=400,
+                error_code="ALREADY_REVIEWED",
+            )
+
+        contribution = contribution_repository.get(db, payout.contribution_id)
+        member = contribution_member_repository.get_by_id(db, payout.member_id)
+        if contribution is None or member is None:
+            raise AppException(message="Payout contribution or member not found.", status_code=404, error_code="PAYOUT_NOT_FOUND")
+
+        if not self._payout_is_eligible(db, contribution, member.id, payout.round_number):
+            raise AppException(
+                message=(
+                    "This round is not complete yet. All active members must pay their "
+                    "round contribution before the payout can be approved."
+                ),
+                status_code=400,
+                error_code="ROUND_NOT_COMPLETE",
+            )
+
+        now = _utcnow()
+        gross = payout.amount
+        commission = commission_service.resolve(
+            db,
+            key=CONTRIBUTION_PAYOUT,
+            amount=gross,
+            contribution=contribution,
+        )
+        net = commission["net"]
+
+        transaction = wallet_service.credit(
+            db,
+            user_id=member.user_id,
+            amount=net,
+            description=f"Contribution payout — {contribution.name} (Round {payout.round_number})",
+            reference=make_reference("PAY"),
+            type_=TransactionType.CONTRIBUTION,
+            details={
+                "contribution_id": str(contribution.id),
+                "payout": True,
+                "member_id": str(member.id),
+                "round_number": payout.round_number,
+                "approved_by": str(actor.id),
+            },
+            gross_amount=gross,
+            commission_rate=commission.get("rate"),
+            commission_type=commission.get("type"),
+            commission_amount=commission.get("commission"),
+            fee_amount=commission.get("fixed"),
+            net_amount=net,
+            source=WithdrawalSource.CONTRIBUTION.value,
+            related_contribution_id=contribution.id,
+        )
+
+        payout.status = PayoutStatus.PAID
+        payout.paid_at = now
+        payout.transaction_id = transaction.id
+        payout.eligible_at = payout.eligible_at or now
+        payout.reviewed_by = actor.id
+        payout.reviewed_at = now
+        payout.admin_note = note
+        payout.gross_amount = gross
+        payout.commission_rate = commission.get("rate")
+        payout.commission_type = commission.get("type")
+        payout.commission_amount = commission.get("commission")
+        payout.net_amount = net
+        db.flush()
+
+        owner = member.user
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=actor.role,
+            action=AuditAction.APPROVE,
+            category=AuditCategory.CONTRIBUTION,
+            description=f"Approved rotational payout {gross} (net {net}) for '{contribution.name}' (Round {payout.round_number}).",
+            target=contribution.name,
+            target_id=contribution.id,
+            details={"round_number": payout.round_number, "transaction_id": str(transaction.id), "note": note},
+        )
+
+        notification_service.create(
+            db,
+            user_id=member.user_id,
+            title="Your contribution payout is in",
+            message=f"We credited {net} to your wallet for '{contribution.name}' (Round {payout.round_number}).",
+            type_=NotificationType.CONTRIBUTION,
+        )
+        return payout
+
+    def reject_payout(self, db: Session, *, actor: User, payout_id: uuid.UUID, note: str | None = None) -> ContributionPayout:
+        payout = contribution_payout_repository.get(db, payout_id)
+        if payout is None:
+            raise AppException(message="Payout not found.", status_code=404, error_code="PAYOUT_NOT_FOUND")
+        if payout.status != PayoutStatus.PENDING:
+            raise AppException(
+                message="This payout has already been reviewed.",
+                status_code=400,
+                error_code="ALREADY_REVIEWED",
+            )
+        contribution = contribution_repository.get(db, payout.contribution_id)
+        member = contribution_member_repository.get_by_id(db, payout.member_id)
+
+        payout.status = PayoutStatus.SKIPPED
+        payout.reviewed_by = actor.id
+        payout.reviewed_at = _utcnow()
+        payout.admin_note = note or "Rejected by admin"
+        db.flush()
+
+        audit_log_repository.create(
+            db,
+            actor_id=actor.id,
+            actor_name=f"{actor.first_name} {actor.last_name}",
+            actor_email=actor.email,
+            actor_role=actor.role,
+            action=AuditAction.REJECT,
+            category=AuditCategory.CONTRIBUTION,
+            description=(
+                f"Rejected payout for '{contribution.name if contribution else 'plan'}' "
+                f"(Round {payout.round_number})."
+            ),
+            target=contribution.name if contribution else None,
+            target_id=payout.id,
+            details={"note": note},
+        )
+        if member is not None:
+            notification_service.create(
+                db,
+                user_id=member.user_id,
+                title="Payout not paid",
+                message=(
+                    f"Your payout for Round {payout.round_number} was not approved. "
+                    "Contact support if you believe this is a mistake."
+                ),
+                type_=NotificationType.CONTRIBUTION,
+            )
+        return payout
 
     def run_automatic_contributions(self, db: Session, *, contribution_id: uuid.UUID | None = None) -> dict:
         """Attempt to collect pending due contributions via automatic wallet funding.

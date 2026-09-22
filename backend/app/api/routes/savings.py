@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import get_current_user
@@ -8,7 +8,6 @@ from app.core.database import get_db
 from app.models.user import User
 from app.schemas.response import MessageResponse, SuccessResponse
 from app.schemas.savings import (
-    FundSavingsRequest,
     SavingsAccountDetail,
     SavingsGoalCreate,
     SavingsGoalOut,
@@ -23,25 +22,6 @@ router = APIRouter(tags=["Savings"])
 def get_savings_account(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     data = savings_service.get_account(db, user=user)
     return SuccessResponse(message="Savings account retrieved.", data=data)
-
-
-@router.post("/fund", response_model=SuccessResponse[SavingsAccountDetail])
-def fund_savings(
-    payload: FundSavingsRequest,
-    request: Request,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    ip = request.client.host if request.client else None
-    data = savings_service.fund(
-        db,
-        user=user,
-        amount=payload.amount,
-        note=payload.note,
-        ip_address=ip,
-        goal_id=payload.goal_id,
-    )
-    return SuccessResponse(message="Savings funded.", data=data)
 
 
 @router.get("/goals")

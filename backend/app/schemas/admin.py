@@ -21,6 +21,12 @@ class AdminStats(BaseModel):
     total_in_contribution_plans: int = 0
     total_in_savings_plans: int = 0
     plan_volume: list[dict] = []
+    # Financial pipeline metrics.
+    pending_emergency_requests: int = 0
+    pending_payouts: int = 0
+    total_commissions: int = 0
+    completed_withdrawals: int = 0
+    failed_transactions: int = 0
 
 
 class AdminUserDetail(BaseModel):

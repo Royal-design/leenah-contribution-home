@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 import uuid
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +52,12 @@ class SavingsPlan(Base):
     total_saved: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_expected: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # --- per-plan commission configuration (overrides the platform default) ---
+    commission_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    commission_type: Mapped[str | None] = mapped_column(String)  # percentage | fixed | percentage_fixed
+    commission_rate: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))  # percentage value
+    commission_fixed: Mapped[int | None] = mapped_column(Integer)  # fixed naira fee
 
     status: Mapped[SavingsPlanStatus] = mapped_column(
         SAEnum(SavingsPlanStatus), nullable=False, default=SavingsPlanStatus.UPCOMING

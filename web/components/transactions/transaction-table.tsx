@@ -57,20 +57,38 @@ export function TransactionTable({
       ),
     },
     {
+      accessorKey: "commissionAmount",
+      header: "Commission",
+      cell: ({ row }) => (
+        <span className="tabular-nums text-muted-foreground">
+          {(row.original.commissionAmount ?? 0) > 0
+            ? formatNaira(row.original.commissionAmount ?? 0)
+            : "—"}
+        </span>
+      ),
+    },
+    {
       accessorKey: "amount",
-      header: () => <span>Amount</span>,
+      header: () => <span>Amount / Net</span>,
       cell: ({ row }) => {
         const isIncoming = row.original.type !== "withdrawal"
+        const hasCommission = (row.original.commissionAmount ?? 0) > 0
+        const net = row.original.netAmount ?? row.original.amount
         return (
-          <span
-            className={cn(
-              "font-medium tabular-nums",
-              isIncoming ? "text-success" : "text-destructive"
+          <div className="flex flex-col items-end">
+            <span
+              className={cn(
+                "font-medium tabular-nums",
+                isIncoming ? "text-success" : "text-destructive"
+              )}
+            >
+              {isIncoming ? "+" : "-"}
+              {formatNaira(row.original.amount)}
+            </span>
+            {hasCommission && (
+              <span className="text-xs text-muted-foreground">Net {formatNaira(net)}</span>
             )}
-          >
-            {isIncoming ? "+" : "-"}
-            {formatNaira(row.original.amount)}
-          </span>
+          </div>
         )
       },
     },
@@ -133,6 +151,7 @@ export function TransactionTable({
         const type = transactionTypeMeta[original.type]
         const status = transactionStatusMeta[original.status]
         const isIncoming = original.type !== "withdrawal"
+        const hasCommission = (original.commissionAmount ?? 0) > 0
         return (
           <div className="flex flex-col gap-3">
             <div className="flex items-start justify-between gap-3">
@@ -152,6 +171,16 @@ export function TransactionTable({
                 {formatNaira(original.amount)}
               </span>
             </div>
+            {hasCommission && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  Commission {formatNaira(original.commissionAmount ?? 0)}
+                </span>
+                <span className="font-medium text-foreground tabular-nums">
+                  Net {formatNaira(original.netAmount ?? original.amount)}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3">
               <Badge variant="outline" className="font-normal capitalize">
                 {type.label}

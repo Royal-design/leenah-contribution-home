@@ -313,7 +313,8 @@ export default function WalletPage() {
       <WithdrawDialog
         open={withdrawOpen}
         onOpenChange={setWithdrawOpen}
-        balance={available}
+        available={available}
+        mode="wallet"
       />
     </div>
   )

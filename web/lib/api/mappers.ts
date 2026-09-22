@@ -96,6 +96,15 @@ export interface RawContributionPayout {
   status: "pending" | "paid" | "skipped"
   paid_at: string | null
   transaction_id: string | null
+  eligible_at?: string | null
+  reviewed_by?: string | null
+  reviewed_at?: string | null
+  admin_note?: string | null
+  gross_amount?: number | null
+  commission_rate?: number | null
+  commission_type?: string | null
+  commission_amount?: number | null
+  net_amount?: number | null
 }
 
 export function mapContributionPayout(raw: RawContributionPayout): ContributionPayout {
@@ -109,6 +118,15 @@ export function mapContributionPayout(raw: RawContributionPayout): ContributionP
     status: raw.status,
     paidAt: raw.paid_at ?? undefined,
     transactionId: raw.transaction_id ?? undefined,
+    eligibleAt: raw.eligible_at ?? undefined,
+    reviewedBy: raw.reviewed_by ?? undefined,
+    reviewedAt: raw.reviewed_at ?? undefined,
+    adminNote: raw.admin_note ?? undefined,
+    grossAmount: raw.gross_amount ?? undefined,
+    commissionRate: raw.commission_rate ?? undefined,
+    commissionType: raw.commission_type ?? undefined,
+    commissionAmount: raw.commission_amount ?? undefined,
+    netAmount: raw.net_amount ?? undefined,
   }
 }
 
@@ -134,6 +152,10 @@ export interface RawContribution {
   is_open: boolean
   created_by: string
   created_at: string
+  commission_enabled?: boolean
+  commission_type?: string | null
+  commission_rate?: number | null
+  commission_fixed?: number | null
   members?: RawContributionMember[]
   schedule?: RawContributionScheduleEntry[]
   payouts?: RawContributionPayout[]
@@ -196,6 +218,10 @@ export function mapContribution(raw: RawContribution): Contribution {
     withdrawalRule,
     createdBy: raw.created_by ?? undefined,
     isOpen: raw.is_open,
+    commissionEnabled: raw.commission_enabled ?? false,
+    commissionType: raw.commission_type ?? undefined,
+    commissionRate: raw.commission_rate ?? undefined,
+    commissionFixed: raw.commission_fixed ?? undefined,
   }
 }
 
@@ -306,6 +332,11 @@ export interface RawSavingsPlan {
   progress: number
   status: "active" | "upcoming" | "completed" | "paused" | "draft"
   is_open: boolean
+  commission_enabled?: boolean
+  commission_type?: string | null
+  commission_rate?: number | null
+  commission_fixed?: number | null
+  withdrawable_amount?: number
   enroll_count: number
   created_by: string
   created_at: string
@@ -378,6 +409,11 @@ export function mapSavingsPlan(raw: RawSavingsPlan): SavingsPlan {
     progress: raw.progress,
     status: raw.status,
     isOpen: raw.is_open,
+    commissionEnabled: raw.commission_enabled ?? false,
+    commissionType: raw.commission_type ?? undefined,
+    commissionRate: raw.commission_rate ?? undefined,
+    commissionFixed: raw.commission_fixed ?? undefined,
+    withdrawableAmount: raw.withdrawable_amount ?? 0,
     enrollCount: raw.enroll_count,
     createdBy: raw.created_by,
     createdAt: raw.created_at,
@@ -398,6 +434,22 @@ export interface RawTransaction {
   reference: string
   details: Record<string, unknown> | null
   date: string
+  currency?: string
+  source?: string | null
+  gross_amount?: number | null
+  commission_rate?: number | null
+  commission_type?: string | null
+  commission_amount?: number | null
+  fee_amount?: number | null
+  net_amount?: number | null
+  related_savings_plan_id?: string | null
+  related_contribution_id?: string | null
+  related_withdrawal_id?: string | null
+  related_emergency_request_id?: string | null
+  completed_at?: string | null
+  approved_by?: string | null
+  approved_at?: string | null
+  failure_reason?: string | null
 }
 
 export function mapTransaction(raw: RawTransaction): Transaction {
@@ -409,6 +461,22 @@ export function mapTransaction(raw: RawTransaction): Transaction {
     description: raw.description,
     date: raw.date,
     reference: raw.reference,
+    currency: raw.currency ?? "NGN",
+    source: raw.source ?? undefined,
+    grossAmount: raw.gross_amount ?? undefined,
+    commissionRate: raw.commission_rate ?? undefined,
+    commissionType: raw.commission_type ?? undefined,
+    commissionAmount: raw.commission_amount ?? undefined,
+    feeAmount: raw.fee_amount ?? undefined,
+    netAmount: raw.net_amount ?? undefined,
+    relatedSavingsPlanId: raw.related_savings_plan_id ?? undefined,
+    relatedContributionId: raw.related_contribution_id ?? undefined,
+    relatedWithdrawalId: raw.related_withdrawal_id ?? undefined,
+    relatedEmergencyRequestId: raw.related_emergency_request_id ?? undefined,
+    completedAt: raw.completed_at ?? undefined,
+    approvedBy: raw.approved_by ?? undefined,
+    approvedAt: raw.approved_at ?? undefined,
+    failureReason: raw.failure_reason ?? undefined,
     metadata: raw.details
       ? {
           contributionName: raw.details.contribution_name as string | undefined,
@@ -427,17 +495,29 @@ export interface RawWithdrawal {
   user_id: string
   amount: number
   withdrawal_type: string
-  bank_name: string
-  account_number: string
+  channel: "wallet" | "bank"
+  source: "wallet" | "savings_plan" | "contribution" | "emergency" | "admin"
+  bank_name: string | null
+  account_number: string | null
   account_name: string | null
   destination: string
   contribution_name: string | null
+  related_savings_plan_id?: string | null
+  related_contribution_id?: string | null
   status: "pending" | "approved" | "processing" | "rejected" | "completed" | "failed" | "reversed"
   requested_at: string
   reviewed_by: string | null
   reviewed_at: string | null
-  masked_account_number?: string
-  processing_message?: string
+  gross_amount?: number | null
+  commission_rate?: number | null
+  commission_type?: string | null
+  commission_amount?: number | null
+  fee_amount?: number | null
+  net_amount?: number | null
+  reason?: string | null
+  admin_note?: string | null
+  masked_account_number?: string | null
+  processing_message?: string | null
   bank_account_id?: string | null
   paystack_recipient_code?: string | null
   paystack_transfer_code?: string | null
@@ -461,18 +541,30 @@ export function mapWithdrawal(raw: RawWithdrawal): Withdrawal {
     requestedAt: raw.requested_at,
     destination: raw.destination,
     status: raw.status,
+    channel: raw.channel,
+    source: raw.source,
     contributionName: raw.contribution_name ?? undefined,
-    bankName: raw.bank_name,
+    bankName: raw.bank_name ?? undefined,
     accountName: raw.account_name ?? undefined,
-    accountNumber: raw.account_number,
+    accountNumber: raw.account_number ?? undefined,
     maskedAccountNumber: raw.masked_account_number ?? undefined,
     processingMessage: raw.processing_message ?? undefined,
+    reason: raw.reason ?? undefined,
+    adminNote: raw.admin_note ?? undefined,
     reviewedAt: raw.reviewed_at ?? undefined,
     approvedAt: raw.approved_at ?? undefined,
     completedAt: raw.completed_at ?? undefined,
     rejectedAt: raw.rejected_at ?? undefined,
     failureReason: raw.failure_reason ?? undefined,
     bankAccountId: raw.bank_account_id ?? undefined,
+    relatedSavingsPlanId: raw.related_savings_plan_id ?? undefined,
+    relatedContributionId: raw.related_contribution_id ?? undefined,
+    grossAmount: raw.gross_amount ?? undefined,
+    commissionRate: raw.commission_rate ?? undefined,
+    commissionType: raw.commission_type ?? undefined,
+    commissionAmount: raw.commission_amount ?? undefined,
+    feeAmount: raw.fee_amount ?? undefined,
+    netAmount: raw.net_amount ?? undefined,
     paystackRecipientCode: raw.paystack_recipient_code ?? undefined,
     paystackTransferCode: raw.paystack_transfer_code ?? undefined,
     paystackReference: raw.paystack_reference ?? undefined,
@@ -518,6 +610,11 @@ export interface RawAdminStats {
   total_in_contribution_plans?: number
   total_in_savings_plans?: number
   plan_volume?: Array<{ month: string; volume: number }>
+  pending_emergency_requests?: number
+  pending_payouts?: number
+  total_commissions?: number
+  completed_withdrawals?: number
+  failed_transactions?: number
 }
 
 export function mapAdminStats(raw: RawAdminStats): AdminStats {
@@ -536,6 +633,11 @@ export function mapAdminStats(raw: RawAdminStats): AdminStats {
     totalInContributionPlans: raw.total_in_contribution_plans ?? 0,
     totalInSavingsPlans: raw.total_in_savings_plans ?? 0,
     planVolume: raw.plan_volume ?? [],
+    pendingEmergencyRequests: raw.pending_emergency_requests ?? 0,
+    pendingPayouts: raw.pending_payouts ?? 0,
+    totalCommissions: raw.total_commissions ?? 0,
+    completedWithdrawals: raw.completed_withdrawals ?? 0,
+    failedTransactions: raw.failed_transactions ?? 0,
   }
 }
 

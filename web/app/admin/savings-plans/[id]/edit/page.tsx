@@ -32,6 +32,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { CommissionConfigFields, type CommissionConfigValue } from "@/components/admin/commission-config-fields"
 import {
   useAdminSavingsPlan,
   useAdminUpdateSavingsPlan,
@@ -149,6 +150,12 @@ export default function EditSavingsPlanPage() {
   const previewEndDate = watched.startDate && durationMonths > 0
     ? endDateFromDuration(watched.startDate, durationMonths)
     : ""
+  const [commission, setCommission] = React.useState<CommissionConfigValue>({
+    enabled: false,
+    type: "percentage",
+    rate: 0,
+    fixed: 0,
+  })
 
   React.useEffect(() => {
     if (!plan) return
@@ -164,6 +171,12 @@ export default function EditSavingsPlanPage() {
       customDuration: plan.durationMonths ?? 12,
       status: plan.status,
       isOpen: plan.isOpen,
+    })
+    setCommission({
+      enabled: plan.commissionEnabled ?? false,
+      type: plan.commissionType ?? "percentage",
+      rate: plan.commissionRate ?? 0,
+      fixed: plan.commissionFixed ?? 0,
     })
   }, [plan, form])
 
@@ -209,6 +222,10 @@ export default function EditSavingsPlanPage() {
           durationMonths: resolveDurationMonths(values) || undefined,
           status: values.status,
           isOpen: values.isOpen,
+          commissionEnabled: commission.enabled,
+          commissionType: commission.enabled ? commission.type : undefined,
+          commissionRate: commission.enabled ? commission.rate : undefined,
+          commissionFixed: commission.enabled ? commission.fixed : undefined,
         },
       },
       { onSuccess: () => router.push("/admin/savings-plans") }
@@ -501,6 +518,8 @@ export default function EditSavingsPlanPage() {
             </FieldGroup>
           </CardContent>
         </Card>
+
+        <CommissionConfigFields value={commission} onChange={setCommission} />
 
         <div className="flex gap-2">
           <Button

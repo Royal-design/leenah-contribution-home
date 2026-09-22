@@ -32,6 +32,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { StatusBadge } from "@/components/shared/status-badge"
+import { CommissionConfigFields, type CommissionConfigValue } from "@/components/admin/commission-config-fields"
 import { useAdminCreateSavingsPlan } from "@/hooks/queries/use-savings-plans"
 import { DURATION_PRESETS, isPastDate, endDateFromDuration } from "@/lib/dates"
 import { formatDate, formatNaira } from "@/lib/format"
@@ -134,6 +135,12 @@ export default function CreateSavingsPlanPage() {
   const previewEndDate = watched.startDate
     ? endDateFromDuration(watched.startDate, durationMonths)
     : ""
+  const [commission, setCommission] = React.useState<CommissionConfigValue>({
+    enabled: false,
+    type: "percentage",
+    rate: 0,
+    fixed: 0,
+  })
 
   function onSubmit(values: FormValues) {
     createPlan.mutate(
@@ -150,6 +157,10 @@ export default function CreateSavingsPlanPage() {
         durationMonths: resolveDurationMonths(values),
         status: values.status,
         isOpen: values.isOpen,
+        commissionEnabled: commission.enabled,
+        commissionType: commission.enabled ? commission.type : undefined,
+        commissionRate: commission.enabled ? commission.rate : undefined,
+        commissionFixed: commission.enabled ? commission.fixed : undefined,
       },
       {
         onSuccess: () => router.push("/admin/savings-plans"),
@@ -449,6 +460,8 @@ export default function CreateSavingsPlanPage() {
               </FieldGroup>
             </CardContent>
           </Card>
+
+          <CommissionConfigFields value={commission} onChange={setCommission} />
 
           <Button
             type="submit"

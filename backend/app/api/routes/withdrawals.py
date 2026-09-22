@@ -8,10 +8,34 @@ from app.core.database import get_db
 from app.models.enums import WithdrawalStatus
 from app.models.user import User
 from app.schemas.response import SuccessResponse
-from app.schemas.withdrawal import WithdrawalCreate, WithdrawalOut
+from app.schemas.withdrawal import (
+    WithdrawalCreate,
+    WithdrawalOut,
+    WithdrawalPreviewOut,
+    WithdrawalPreviewRequest,
+)
 from app.services.withdrawal_service import withdrawal_service
 
 router = APIRouter(tags=["Withdrawals"])
+
+
+@router.post("/preview", response_model=SuccessResponse[WithdrawalPreviewOut])
+def preview_withdrawal(
+    payload: WithdrawalPreviewRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    data = withdrawal_service.preview(
+        db,
+        user=user,
+        amount=payload.amount,
+        withdrawal_type=payload.withdrawal_type,
+        channel=payload.channel.value if payload.channel else None,
+        source=payload.source,
+        savings_plan_id=payload.savings_plan_id,
+        contribution_id=payload.contribution_id,
+    )
+    return SuccessResponse(message="Withdrawal preview computed.", data=data)
 
 
 @router.post("", response_model=SuccessResponse[WithdrawalOut])
@@ -21,12 +45,16 @@ def request_withdrawal(payload: WithdrawalCreate, user: User = Depends(get_curre
         user=user,
         amount=payload.amount,
         withdrawal_type=payload.withdrawal_type,
+        channel=payload.channel.value if payload.channel else None,
+        source=payload.source,
+        reason=payload.reason,
         bank_account_id=payload.bank_account_id,
         bank_name=payload.bank_name,
         account_number=payload.account_number,
         account_name=payload.account_name,
         destination=payload.destination,
         contribution_id=payload.contribution_id,
+        savings_plan_id=payload.savings_plan_id,
     )
     return SuccessResponse(message="Withdrawal requested.", data=WithdrawalOut.model_validate(withdrawal))
 

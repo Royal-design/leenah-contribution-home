@@ -12,6 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
+import { WithdrawDialog } from "@/components/forms/withdraw-dialog"
+import { EmergencyWithdrawalDialog } from "@/components/forms/emergency-withdrawal-dialog"
 import {
   useSavingsPlan,
   useJoinSavingsPlan,
@@ -31,6 +33,8 @@ export default function SavingsPlanDetailPage() {
   const leavePlan = useLeaveSavingsPlan()
   const payPlan = usePaySavingsPlan()
   const [leaveOpen, setLeaveOpen] = React.useState(false)
+  const [withdrawOpen, setWithdrawOpen] = React.useState(false)
+  const [emergencyOpen, setEmergencyOpen] = React.useState(false)
 
   if (isPending) {
     return (
@@ -105,10 +109,22 @@ export default function SavingsPlanDetailPage() {
             )
           ) : (
             <>
+              {plan.status === "completed" && plan.withdrawableAmount > 0 ? (
+                <Button onClick={() => setWithdrawOpen(true)}>
+                  <Wallet />
+                  Withdraw funds
+                  <span className="font-normal opacity-80">· {formatNaira(plan.withdrawableAmount)}</span>
+                </Button>
+              ) : null}
               {nextDue && plan.status !== "completed" && (
                 <Button onClick={handlePay} disabled={payPlan.isPending}>
                   <Wallet />
                   {payPlan.isPending ? "Paying…" : `Pay ${formatNaira(nextDue.amount)}`}
+                </Button>
+              )}
+              {plan.status !== "completed" && (plan.enrollment?.totalSaved ?? 0) > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setEmergencyOpen(true)}>
+                  Request emergency withdrawal
                 </Button>
               )}
               <Button
@@ -188,6 +204,46 @@ export default function SavingsPlanDetailPage() {
         </Card>
       </div>
 
+      {joined && (
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4 sm:p-5",
+            plan.status === "completed"
+              ? "border-success/30 bg-success/10"
+              : "border-warning/30 bg-warning/10"
+          )}
+        >
+          <div>
+            <p className="font-medium">
+              {plan.status === "completed"
+                ? "Savings completed — your funds are ready to withdraw."
+                : "Your savings are still locked in this plan."}
+            </p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {plan.status === "completed"
+                ? `${formatNaira(plan.withdrawableAmount)} available · withdraw to your wallet or bank account.`
+                : "You can request an emergency withdrawal; it must be approved by an admin."}
+            </p>
+          </div>
+          {plan.status === "completed" ? (
+            plan.withdrawableAmount > 0 ? (
+              <Button onClick={() => setWithdrawOpen(true)}>
+                <Wallet />
+                Withdraw savings
+              </Button>
+            ) : (
+              <Badge variant="outline" className="border-transparent bg-muted text-muted-foreground">
+                Fully withdrawn
+              </Badge>
+            )
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setEmergencyOpen(true)}>
+              Request emergency withdrawal
+            </Button>
+          )}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Your payment schedule</CardTitle>
@@ -260,6 +316,24 @@ export default function SavingsPlanDetailPage() {
             onSuccess: () => router.push("/my-plans"),
           })
         }}
+      />
+
+      <WithdrawDialog
+        open={withdrawOpen}
+        onOpenChange={setWithdrawOpen}
+        available={plan.withdrawableAmount}
+        title="Withdraw savings"
+        mode="savings_plan"
+        withdrawalType="savings"
+        savingsPlanId={plan.id}
+        defaultChannel="wallet"
+      />
+
+      <EmergencyWithdrawalDialog
+        open={emergencyOpen}
+        onOpenChange={setEmergencyOpen}
+        available={plan.enrollment?.totalSaved ?? 0}
+        savingsPlanId={plan.id}
       />
     </div>
   )

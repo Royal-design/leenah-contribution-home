@@ -26,6 +26,11 @@ class SavingsPlanCreate(BaseModel):
     end_date: datetime | None = None
     status: SavingsPlanStatus | None = None
     is_open: bool = True
+    # Optional per-plan commission override (highest priority).
+    commission_enabled: bool = False
+    commission_type: str | None = Field(default=None, max_length=30)
+    commission_rate: float | None = Field(default=None, ge=0, le=100)
+    commission_fixed: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def _validate_dates(self) -> "SavingsPlanCreate":
@@ -51,6 +56,10 @@ class SavingsPlanUpdate(BaseModel):
     next_payment_date: datetime | None = None
     status: SavingsPlanStatus | None = None
     is_open: bool | None = None
+    commission_enabled: bool | None = None
+    commission_type: str | None = Field(default=None, max_length=30)
+    commission_rate: float | None = Field(default=None, ge=0, le=100)
+    commission_fixed: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def _validate_dates(self) -> "SavingsPlanUpdate":
@@ -125,6 +134,11 @@ class SavingsPlanOut(BaseModel):
     progress: int
     status: SavingsPlanStatus
     is_open: bool
+    commission_enabled: bool = False
+    commission_type: str | None = None
+    commission_rate: float | None = None
+    commission_fixed: int | None = None
+    withdrawable_amount: int = 0
     enroll_count: int = 0
     created_by: uuid.UUID
     created_at: datetime
