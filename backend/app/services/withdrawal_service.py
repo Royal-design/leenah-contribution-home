@@ -687,13 +687,6 @@ class WithdrawalService:
     def _approve(self, db: Session, actor: User, withdrawal: Withdrawal, reason: str | None = None) -> Withdrawal:
         now = _utcnow()
 
-        if withdrawal.user_id == actor.id:
-            raise AppException(
-                message="You cannot approve your own withdrawal request.",
-                status_code=403,
-                error_code="SELF_REVIEW_FORBIDDEN",
-            )
-
         withdrawal.reviewed_by = actor.id
         withdrawal.reviewed_at = now
         withdrawal.admin_id = actor.id
